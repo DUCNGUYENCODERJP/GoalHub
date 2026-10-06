@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: goalhub
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/goalhub?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
+    username: root
+    password: "25112006"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  jackson:
+    time-zone: Asia/Ho_Chi_Minh
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: 3cfa76ef14937c1c0ea519f8fc057a80fcd04a7d3d7f4c3be5ba3a5e8e6a3d1f
+    expiration-ms: 86400000   # 24 hours
+
+logging:
+  level:
+    com.goalhub: DEBUG
+    org.springframework.security: INFO
