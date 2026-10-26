@@ -51,4 +51,35 @@ public interface OrderService {
      * @throws org.springframework.security.access.AccessDeniedException if not owner or ADMIN
      */
     OrderResponse getOrderById(Long orderId, User currentUser);
+
+    /**
+     * Pay for an order.
+     * Transitions order from PENDING to PAID, and its reserved seats to SOLD.
+     * Rejects if the order is expired or no longer in PENDING status.
+     *
+     * @param orderId     order to pay
+     * @param currentUser authenticated user paying
+     * @return updated order response
+     */
+    OrderResponse payOrder(Long orderId, User currentUser);
+
+    /**
+     * Cancel an order by the owner or an ADMIN.
+     * Transitions order to CANCELLED, releases reserved seats back to AVAILABLE,
+     * and restores match.availableSeats.
+     *
+     * @param orderId     order to cancel
+     * @param currentUser authenticated user cancelling
+     * @return updated order response
+     */
+    OrderResponse cancelOrder(Long orderId, User currentUser);
+
+    /**
+     * Scheduled job helper: find all PENDING orders past their expiresAt,
+     * automatically cancel them, release reserved seats to AVAILABLE,
+     * and restore match available seats. Idempotent.
+     *
+     * @return count of released orders
+     */
+    int releaseExpiredOrders();
 }

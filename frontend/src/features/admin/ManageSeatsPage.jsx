@@ -76,152 +76,115 @@ export default function ManageSeatsPage() {
   const sold      = seats.filter(s => s.status === 'SOLD').length;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      {/* Breadcrumb + header */}
-      <div>
-        <div className="flex items-center gap-2 text-sm text-slate-400 mb-2">
-          <Link to="/admin/matches" className="hover:text-blue-600 transition-colors">← Quản lý trận đấu</Link>
-          <span>/</span>
-          <span className="text-slate-600 font-medium">Quản lý ghế</span>
-        </div>
-        <h1 className="text-2xl font-black text-slate-800" style={{ fontFamily: "'Outfit', sans-serif" }}>
-          🪑 {match ? `${match.homeTeam} vs ${match.awayTeam}` : `Trận #${matchId}`}
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">Tạo và quản lý ghế ngồi cho trận đấu</p>
-      </div>
-
-      {/* Seat stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Tổng ghế', value: totalSeats, cls: 'text-slate-800', bg: 'bg-slate-50 border-slate-200' },
-          { label: '🟢 Trống', value: available, cls: 'text-green-700', bg: 'bg-green-50 border-green-100' },
-          { label: '⏳ Đã giữ', value: reserved, cls: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-100' },
-          { label: '🔴 Đã bán', value: sold, cls: 'text-red-600', bg: 'bg-red-50 border-red-100' },
-        ].map(s => (
-          <div key={s.label} className={`rounded-2xl border p-4 ${s.bg}`}>
-            <p className="text-xs text-slate-400 font-medium mb-1">{s.label}</p>
-            <p className={`text-2xl font-black ${s.cls}`}>{s.value}</p>
+    <div style={{ minHeight: '100vh', padding: '32px 0 60px' }}>
+      <div className="gt-container">
+        {/* Breadcrumb + header */}
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#666', marginBottom: '8px' }}>
+            <Link to="/admin/matches" style={{ color: '#888', textDecoration: 'none' }}>← Quản lý trận đấu</Link>
+            <span>/</span>
+            <span style={{ color: '#39ff14' }}>Quản lý ghế</span>
           </div>
-        ))}
-      </div>
-
-      {/* Batch generator */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-50">
-          <h2 className="font-bold text-slate-800">⚡ Tạo ghế hàng loạt</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Tự động sinh mã ghế theo hàng và loại</p>
+          <h1 className="gt-section-title">
+            {match ? `${match.homeTeam} vs ${match.awayTeam}` : `Trận #${matchId}`}
+          </h1>
+          <p style={{ color: '#666', fontSize: '13px', marginTop: '6px' }}>Tạo và cấu hình sơ đồ ghế ngồi cho trận đấu</p>
         </div>
 
-        <div className="p-5">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-            {[
-              { label: 'Prefix hàng (A, B, VIP...)', field: 'prefix', type: 'text', placeholder: 'A' },
-              { label: 'Số bắt đầu', field: 'start', type: 'number', min: 1, placeholder: '1' },
-              { label: 'Số lượng ghế', field: 'count', type: 'number', min: 1, max: 500, placeholder: '10' },
-              { label: 'Giá vé (VNĐ)', field: 'price', type: 'number', min: 0, placeholder: '150000' },
-            ].map(({ label, field, ...rest }) => (
-              <div key={field}>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
-                <input
-                  {...rest}
-                  value={gen[field]}
-                  onChange={setG(field)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                />
-              </div>
-            ))}
+        {/* Seat stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          {[
+            { label: 'Tổng số ghế', value: totalSeats, color: '#fff' },
+            { label: 'Ghế trống', value: available, color: '#39ff14' },
+            { label: 'Đang giữ', value: reserved, color: '#f5b700' },
+            { label: 'Đã bán', value: sold, color: '#e53935' },
+          ].map(s => (
+            <div key={s.label} className="gt-card-flat" style={{ padding: '16px 20px', background: '#121212' }}>
+              <p style={{ fontSize: '11px', color: '#666', marginBottom: '4px', textTransform: 'uppercase' }}>{s.label}</p>
+              <p style={{ fontSize: '24px', fontWeight: 900, color: s.color, fontFamily: "'Barlow', sans-serif" }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Batch generator */}
+        <div className="gt-card-flat" style={{ padding: '24px', background: '#121212', marginBottom: '28px' }}>
+          <p style={{ fontWeight: 800, color: '#39ff14', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+            ⚡ Tạo Ghế Hàng Loạt
+          </p>
+          <p style={{ color: '#666', fontSize: '12px', marginBottom: '18px' }}>
+            Tự động sinh mã ghế theo hàng và loại cho khán đài
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '16px' }}>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Hạng ghế</label>
-              <select
-                value={gen.seatClass}
-                onChange={setG('seatClass')}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-white"
-              >
-                <option value="STANDARD">🪑 Thường (STANDARD)</option>
-                <option value="VIP">🏆 VIP</option>
+              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Prefix hàng (A, B, VIP...)</label>
+              <input className="gt-input" value={gen.prefix} onChange={setG('prefix')} placeholder="A" />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Số bắt đầu</label>
+              <input type="number" className="gt-input" min={1} value={gen.start} onChange={setG('start')} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Số lượng ghế</label>
+              <input type="number" className="gt-input" min={1} max={500} value={gen.count} onChange={setG('count')} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Giá vé (VNĐ)</label>
+              <input type="number" className="gt-input" min={0} step={5000} value={gen.price} onChange={setG('price')} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Hạng ghế</label>
+              <select className="gt-input" value={gen.seatClass} onChange={setG('seatClass')}>
+                <option value="STANDARD">Khán Đài (STANDARD)</option>
+                <option value="VIP">VIP</option>
               </select>
             </div>
           </div>
 
-          {/* Preview info */}
-          {gen.count && gen.price && (
-            <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-600">
-              <span className="font-semibold">Tổng tiền ước tính: </span>
-              <span className="text-blue-700 font-bold">{formatCurrency(Number(gen.count) * Number(gen.price))}</span>
-              <span className="text-slate-400"> cho {gen.count} ghế {gen.seatClass === 'VIP' ? '🏆 VIP' : '🪑 Thường'}</span>
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            <button
-              id="btn-preview-seats"
-              onClick={handlePreview}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition-colors"
-            >
-              👁 Xem trước ({Number(gen.count)} ghế)
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={handlePreview} className="gt-btn-outline" style={{ fontSize: '13px' }}>
+              👁 Xem Trước ({gen.count} ghế)
             </button>
             <button
-              id="btn-create-seats"
               onClick={handleCreate}
               disabled={creating || preview.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:from-blue-300 disabled:to-blue-300 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-blue-600/25"
+              className="gt-btn-primary"
+              style={{ fontSize: '13px' }}
             >
-              {creating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Đang tạo...
-                </>
-              ) : (
-                `✅ Tạo ${preview.length > 0 ? preview.length : ''} ghế`
-              )}
+              {creating ? 'Đang tạo...' : `+ Thêm ${preview.length > 0 ? preview.length : ''} Ghế`}
             </button>
           </div>
 
-          {/* Preview badge list */}
+          {/* Preview list */}
           {preview.length > 0 && (
-            <div className="mt-4 border border-blue-100 rounded-xl bg-blue-50 p-4">
-              <p className="text-xs font-semibold text-blue-700 mb-2">
-                Xem trước — {preview.length} ghế · {gen.seatClass} · {formatCurrency(gen.price)}/ghế
-              </p>
-              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                {preview.map((s) => (
-                  <span
-                    key={s.seatCode}
-                    className="bg-blue-200/80 text-blue-800 text-xs px-2 py-1 rounded-lg font-mono font-bold"
-                  >
-                    {s.seatCode}
+            <div style={{ marginTop: '16px', background: '#181818', borderRadius: '10px', padding: '12px 16px' }}>
+              <p style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>Danh sách ghế sẽ tạo:</p>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {preview.map(p => (
+                  <span key={p.seatCode} style={{ background: '#222', border: '1px solid #333', color: '#39ff14', fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace' }}>
+                    {p.seatCode} ({p.seatClass})
                   </span>
                 ))}
               </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Current seat map */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-50 flex items-center justify-between">
-          <div>
-            <h2 className="font-bold text-slate-800">Sơ đồ ghế hiện tại</h2>
-            <p className="text-xs text-slate-400 mt-0.5">{totalSeats} ghế · {available} trống</p>
-          </div>
-          {totalSeats > 0 && (
-            <div className="text-xs text-slate-400">
-              {Math.round((1 - available / totalSeats) * 100)}% đã bán/giữ
-            </div>
-          )}
-        </div>
-
-        <div className="p-5">
-          {/* Pitch */}
-          <div className="pitch-indicator mx-auto max-w-xl h-7 flex items-center justify-center mb-5">
-            <span className="text-white/60 text-xs font-bold tracking-widest uppercase z-10 relative">⚽ Sân cỏ / Pitch ⚽</span>
+        {/* Current seat map */}
+        <div className="gt-card-flat" style={{ padding: '24px', background: '#121212' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <p style={{ fontWeight: 800, color: '#fff', fontSize: '14px' }}>Sơ Đồ Ghế Hiện Tại ({seats.length} ghế)</p>
+            <button onClick={loadSeats} className="gt-btn-outline" style={{ fontSize: '11px', padding: '5px 12px' }}>
+              🔄 Tải lại
+            </button>
           </div>
 
           {loadingSeats ? (
             <LoadingSpinner message="Đang tải sơ đồ ghế..." />
+          ) : seats.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#666', padding: '40px 0' }}>Chưa có ghế nào được tạo cho trận này.</p>
           ) : (
-            <SeatMap seats={seats} selectedSeatIds={[]} readonly />
+            <SeatMap seats={seats} selectedIds={[]} onSeatSelect={() => {}} />
           )}
         </div>
       </div>

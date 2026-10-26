@@ -1,12 +1,18 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
 import Navbar from './components/Navbar';
+import CartDrawer from './components/CartDrawer';
+import SocialProofToast from './components/SocialProofToast';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import MatchListPage    from './features/matches/MatchListPage';
 import MatchDetailPage  from './features/matches/MatchDetailPage';
+import BookingPage      from './features/booking/BookingPage';
+import ProfilePage      from './features/profile/ProfilePage';
+import NewsPage         from './features/news/NewsPage';
 import LoginPage        from './features/auth/LoginPage';
 import RegisterPage     from './features/auth/RegisterPage';
 import MyOrdersPage     from './features/orders/MyOrdersPage';
@@ -17,18 +23,25 @@ import ManageSeatsPage  from './features/admin/ManageSeatsPage';
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <div className="min-h-screen flex flex-col bg-slate-50">
-          <Navbar />
-          <main className="flex-1">
+      <CartProvider>
+        <BrowserRouter>
+          <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
+            <Navbar />
+            <CartDrawer />
+            <SocialProofToast />
+            <main style={{ flex: 1 }}>
             <Routes>
               {/* Public */}
-              <Route path="/"              element={<MatchListPage />} />
+              <Route path="/"             element={<MatchListPage />} />
+              <Route path="/lich-dau"     element={<MatchListPage />} />
+              <Route path="/tin-tuc"      element={<NewsPage />} />
               <Route path="/matches/:id"  element={<MatchDetailPage />} />
               <Route path="/login"        element={<LoginPage />} />
               <Route path="/register"     element={<RegisterPage />} />
 
               {/* Authenticated */}
+              <Route path="/booking/:id" element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />
+              <Route path="/profile"     element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="/orders/my"   element={<ProtectedRoute><MyOrdersPage /></ProtectedRoute>} />
               <Route path="/orders/:id"  element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
 
@@ -42,25 +55,6 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
-
-          {/* Footer */}
-          <footer className="border-t border-slate-200 bg-white mt-auto">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-green-400 flex items-center justify-center text-xs">⚽</div>
-                <span className="text-sm font-bold text-slate-700" style={{ fontFamily: "'Outfit', sans-serif" }}>
-                  Goal<span className="text-blue-600">Hub</span>
-                </span>
-                <span className="text-slate-300 text-sm">—</span>
-                <span className="text-xs text-slate-400">Nền tảng đặt vé bóng đá số 1 Việt Nam</span>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
-                <span>© 2026 GoalHub</span>
-                <span className="text-slate-200">•</span>
-                <span>Phiên bản demo — Dữ liệu mẫu</span>
-              </div>
-            </div>
-          </footer>
         </div>
 
         <Toaster
@@ -68,21 +62,24 @@ export default function App() {
           toastOptions={{
             duration: 3500,
             style: {
+              background: '#1a1a1a',
+              color: '#f0f0f0',
+              border: '1px solid #2a2a2a',
+              borderRadius: '10px',
               fontFamily: "'Inter', sans-serif",
-              fontSize: '14px',
-              borderRadius: '12px',
-              border: '1px solid rgba(0,0,0,0.08)',
-              boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.06)',
+              fontSize: '13px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             },
             success: {
-              iconTheme: { primary: '#22c55e', secondary: '#fff' },
+              iconTheme: { primary: '#39ff14', secondary: '#000' },
             },
             error: {
-              iconTheme: { primary: '#ef4444', secondary: '#fff' },
+              iconTheme: { primary: '#e53935', secondary: '#fff' },
             },
           }}
         />
       </BrowserRouter>
+      </CartProvider>
     </AuthProvider>
   );
 }

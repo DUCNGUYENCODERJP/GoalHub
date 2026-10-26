@@ -35,6 +35,6 @@ public class OrderItem {
     private Seat seat;
 
     /** Price snapshot at the time of booking — decoupled from seat's current price. */
-    @Column(name = "price_at_booking", nullable = false, precision = 12, scale = 2)
+    @Column(name = "price_at_booking", nullable = false, precision = 12, scale = 0)
     private BigDecimal priceAtBooking;
 }

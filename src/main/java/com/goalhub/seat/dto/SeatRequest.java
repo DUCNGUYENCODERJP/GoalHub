@@ -21,7 +21,7 @@ public record SeatRequest(
         SeatClass seatClass,
 
         @NotNull(message = "Price is required")
-        @DecimalMin(value = "0.01", message = "Price must be greater than 0")
-        @Digits(integer = 10, fraction = 2, message = "Invalid price format")
+        @DecimalMin(value = "0", message = "Price cannot be negative")
+        @Digits(integer = 12, fraction = 0, message = "Price must be a whole number for VND")
         BigDecimal price
 ) {}

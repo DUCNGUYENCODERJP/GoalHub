@@ -337,4 +337,127 @@ class OrderControllerTest {
                     .andExpect(jsonPath("$.status").value(404));
         }
     }
+
+    // ─── POST /api/orders/{id}/pay ───────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/orders/{id}/pay")
+    class PayOrder {
+
+        @Test
+        @DisplayName("authenticated user can pay for order -> returns 200 and PAID order")
+        void authenticatedUserCanPayOrder() throws Exception {
+            OrderResponse paidResponse = new OrderResponse(
+                    1L, 1L, 1L, "Man Utd", "Liverpool",
+                    LocalDateTime.now().plusDays(7), new BigDecimal("200.00"),
+                    OrderStatus.PAID, List.of(), LocalDateTime.now().plusMinutes(10),
+                    LocalDateTime.now(), LocalDateTime.now()
+            );
+
+            when(orderService.payOrder(eq(1L), any())).thenReturn(paidResponse);
+
+            mockMvc.perform(post("/api/orders/1/pay")
+                            .with(user(regularUser)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.status").value("PAID"));
+        }
+
+        @Test
+        @DisplayName("returns 400 when order has expired")
+        void expiredOrderReturns400() throws Exception {
+            when(orderService.payOrder(eq(1L), any()))
+                    .thenThrow(new BusinessException("Order has expired at 2026-10-17T09:00:00"));
+
+            mockMvc.perform(post("/api/orders/1/pay")
+                            .with(user(regularUser)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Order has expired at 2026-10-17T09:00:00"));
+        }
+
+        @Test
+        @DisplayName("returns 403 when user tries to pay someone else's order")
+        void nonOwnerPayReturns403() throws Exception {
+            when(orderService.payOrder(eq(1L), any()))
+                    .thenThrow(new AccessDeniedException("You do not have permission to pay for this order"));
+
+            mockMvc.perform(post("/api/orders/1/pay")
+                            .with(user(otherUser)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("unauthenticated user cannot pay order -> returns 403")
+        void unauthenticatedPayReturns403() throws Exception {
+            mockMvc.perform(post("/api/orders/1/pay"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("returns 404 when order does not exist")
+        void nonExistentOrderPayReturns404() throws Exception {
+            when(orderService.payOrder(eq(99L), any()))
+                    .thenThrow(new ResourceNotFoundException("Order", "id", 99L));
+
+            mockMvc.perform(post("/api/orders/99/pay")
+                            .with(user(regularUser)))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    // ─── POST /api/orders/{id}/cancel ────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/orders/{id}/cancel")
+    class CancelOrder {
+
+        @Test
+        @DisplayName("owner can cancel order -> returns 200 and CANCELLED order")
+        void ownerCanCancelOrder() throws Exception {
+            OrderResponse cancelledResponse = new OrderResponse(
+                    1L, 1L, 1L, "Man Utd", "Liverpool",
+                    LocalDateTime.now().plusDays(7), new BigDecimal("200.00"),
+                    OrderStatus.CANCELLED, List.of(), LocalDateTime.now().plusMinutes(10),
+                    LocalDateTime.now(), LocalDateTime.now()
+            );
+
+            when(orderService.cancelOrder(eq(1L), any())).thenReturn(cancelledResponse);
+
+            mockMvc.perform(post("/api/orders/1/cancel")
+                            .with(user(regularUser)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(1))
+                    .andExpect(jsonPath("$.status").value("CANCELLED"));
+        }
+
+        @Test
+        @DisplayName("returns 403 when user tries to cancel someone else's order")
+        void nonOwnerCancelReturns403() throws Exception {
+            when(orderService.cancelOrder(eq(1L), any()))
+                    .thenThrow(new AccessDeniedException("You do not have permission to cancel this order"));
+
+            mockMvc.perform(post("/api/orders/1/cancel")
+                            .with(user(otherUser)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("returns 400 when order cannot be cancelled (e.g. already PAID)")
+        void alreadyPaidOrderCancelReturns400() throws Exception {
+            when(orderService.cancelOrder(eq(1L), any()))
+                    .thenThrow(new BusinessException("Cannot cancel order in status: PAID"));
+
+            mockMvc.perform(post("/api/orders/1/cancel")
+                            .with(user(regularUser)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Cannot cancel order in status: PAID"));
+        }
+
+        @Test
+        @DisplayName("unauthenticated user cannot cancel order -> returns 403")
+        void unauthenticatedCancelReturns403() throws Exception {
+            mockMvc.perform(post("/api/orders/1/cancel"))
+                    .andExpect(status().isForbidden());
+        }
+    }
 }

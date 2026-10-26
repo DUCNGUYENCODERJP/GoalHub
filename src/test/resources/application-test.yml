@@ -21,3 +21,6 @@ app:
   jwt:
     secret: 3cfa76ef14937c1c0ea519f8fc057a80fcd04a7d3d7f4c3be5ba3a5e8e6a3d1f
     expiration-ms: 86400000
+  order:
+    hold-duration-minutes: 10
+    cleanup-interval-ms: 30000

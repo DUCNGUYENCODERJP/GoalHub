@@ -60,7 +60,7 @@ public class AuthController {
                 .email(request.email())
                 .password(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName())
-                .role(request.role() != null ? request.role() : Role.USER)
+                .role(Role.USER) // Strictly Role.USER for all public registrations
                 .build();
 
         userRepository.save(user);

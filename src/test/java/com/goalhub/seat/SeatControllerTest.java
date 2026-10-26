@@ -118,18 +118,18 @@ class SeatControllerTest {
     void setUp() {
         sampleSeatA1 = new SeatResponse(
                 1L, 1L, "A1", SeatClass.STANDARD,
-                new BigDecimal("150.00"), SeatStatus.AVAILABLE, 0L,
+                new BigDecimal("150"), SeatStatus.AVAILABLE, 0L,
                 LocalDateTime.now(), LocalDateTime.now()
         );
         sampleSeatVip = new SeatResponse(
                 2L, 1L, "VIP-01", SeatClass.VIP,
-                new BigDecimal("500.00"), SeatStatus.AVAILABLE, 0L,
+                new BigDecimal("500"), SeatStatus.AVAILABLE, 0L,
                 LocalDateTime.now(), LocalDateTime.now()
         );
 
         validBulkRequest = new BulkSeatRequest(List.of(
-                new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150.00")),
-                new SeatRequest("VIP-01", SeatClass.VIP, new BigDecimal("500.00"))
+                new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150")),
+                new SeatRequest("VIP-01", SeatClass.VIP, new BigDecimal("500"))
         ));
     }
 
@@ -252,7 +252,7 @@ class SeatControllerTest {
         @WithMockUser(roles = "ADMIN")
         void returns400OnBlankSeatCode() throws Exception {
             BulkSeatRequest badRequest = new BulkSeatRequest(List.of(
-                    new SeatRequest("", SeatClass.STANDARD, new BigDecimal("100.00"))
+                    new SeatRequest("", SeatClass.STANDARD, new BigDecimal("100"))
             ));
 
             mockMvc.perform(post("/api/matches/1/seats/bulk")
@@ -266,8 +266,8 @@ class SeatControllerTest {
         @WithMockUser(roles = "ADMIN")
         void returns400OnDuplicateCodesInPayload() throws Exception {
             BulkSeatRequest dupRequest = new BulkSeatRequest(List.of(
-                    new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150.00")),
-                    new SeatRequest("A1", SeatClass.VIP, new BigDecimal("500.00"))
+                    new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150")),
+                    new SeatRequest("A1", SeatClass.VIP, new BigDecimal("500"))
             ));
             when(seatService.bulkCreateSeats(eq(1L), any()))
                     .thenThrow(new IllegalArgumentException("Duplicate seat codes in request: [A1]"));

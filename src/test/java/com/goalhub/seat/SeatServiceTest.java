@@ -128,8 +128,8 @@ class SeatServiceTest {
         @BeforeEach
         void setUpRequest() {
             validBulkRequest = new BulkSeatRequest(List.of(
-                    new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150.00")),
-                    new SeatRequest("VIP-01", SeatClass.VIP, new BigDecimal("500.00"))
+                    new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150")),
+                    new SeatRequest("VIP-01", SeatClass.VIP, new BigDecimal("500"))
             ));
         }
 
@@ -174,8 +174,8 @@ class SeatServiceTest {
         @DisplayName("throws IllegalArgumentException when seat codes duplicate within request")
         void throwsOnDuplicateCodesInRequest() {
             BulkSeatRequest duplicateRequest = new BulkSeatRequest(List.of(
-                    new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150.00")),
-                    new SeatRequest("A1", SeatClass.VIP, new BigDecimal("500.00"))  // duplicate
+                    new SeatRequest("A1", SeatClass.STANDARD, new BigDecimal("150")),
+                    new SeatRequest("A1", SeatClass.VIP, new BigDecimal("500"))  // duplicate
             ));
             when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
 

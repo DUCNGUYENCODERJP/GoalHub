@@ -21,9 +21,27 @@ public record OrderResponse(
         BigDecimal totalAmount,
         OrderStatus status,
         List<OrderItemResponse> items,
+        LocalDateTime expiresAt,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
+    /** Backward-compatible constructor without expiresAt */
+    public OrderResponse(
+            Long id,
+            Long userId,
+            Long matchId,
+            String homeTeam,
+            String awayTeam,
+            LocalDateTime matchDate,
+            BigDecimal totalAmount,
+            OrderStatus status,
+            List<OrderItemResponse> items,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+        this(id, userId, matchId, homeTeam, awayTeam, matchDate, totalAmount, status, items, null, createdAt, updatedAt);
+    }
+
     /** Full mapping with items (for detail endpoint). */
     public static OrderResponse from(Order order) {
         List<OrderItemResponse> itemResponses = order.getItems()
@@ -41,6 +59,7 @@ public record OrderResponse(
                 order.getTotalAmount(),
                 order.getStatus(),
                 itemResponses,
+                order.getExpiresAt(),
                 order.getCreatedAt(),
                 order.getUpdatedAt()
         );
@@ -58,6 +77,7 @@ public record OrderResponse(
                 order.getTotalAmount(),
                 order.getStatus(),
                 List.of(),
+                order.getExpiresAt(),
                 order.getCreatedAt(),
                 order.getUpdatedAt()
         );

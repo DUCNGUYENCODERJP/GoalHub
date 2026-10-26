@@ -26,4 +26,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             WHERE o.id = :id
             """)
     Optional<Order> findByIdWithItems(@Param("id") Long id);
+
+    /**
+     * Find pending orders that have exceeded their hold expiration time.
+     * Eagerly loads items, seats, and match to safely release seats and restore inventory.
+     */
+    @Query("""
+            SELECT DISTINCT o FROM Order o
+            LEFT JOIN FETCH o.items i
+            LEFT JOIN FETCH i.seat s
+            LEFT JOIN FETCH o.match m
+            WHERE o.status = :status AND o.expiresAt < :now
+            """)
+    java.util.List<Order> findExpiredOrders(
+            @Param("status") OrderStatus status,
+            @Param("now") java.time.LocalDateTime now);
 }

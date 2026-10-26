@@ -48,7 +48,7 @@ class MatchServiceTest {
                 .status(MatchStatus.UPCOMING)
                 .totalSeats(75000)
                 .availableSeats(75000)
-                .ticketPrice(new BigDecimal("150.00"))
+                .ticketPrice(new BigDecimal("150"))
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -60,7 +60,7 @@ class MatchServiceTest {
                 "Old Trafford",
                 MatchStatus.UPCOMING,
                 75000,
-                new BigDecimal("150.00")
+                new BigDecimal("150")
         );
     }
 
@@ -145,7 +145,7 @@ class MatchServiceTest {
 
             assertThat(response.id()).isEqualTo(1L);
             assertThat(response.homeTeam()).isEqualTo("Manchester United");
-            assertThat(response.ticketPrice()).isEqualByComparingTo("150.00");
+            assertThat(response.ticketPrice()).isEqualByComparingTo("150");
             assertThat(response.availableSeats()).isEqualTo(75000);
 
             verify(matchRepository).save(any(Match.class));
@@ -160,7 +160,7 @@ class MatchServiceTest {
                     "Stadium X",
                     null,  // <-- null status
                     1000,
-                    new BigDecimal("50.00")
+                    new BigDecimal("50")
             );
 
             when(matchRepository.save(any(Match.class))).thenAnswer(inv -> {
@@ -198,7 +198,7 @@ class MatchServiceTest {
                     "Old Trafford",
                     MatchStatus.UPCOMING,
                     80000,  // increased capacity
-                    new BigDecimal("200.00")
+                    new BigDecimal("200")
             );
 
             MatchResponse response = matchService.updateMatch(1L, updateRequest);
@@ -207,7 +207,7 @@ class MatchServiceTest {
             assertThat(response.totalSeats()).isEqualTo(80000);
             // 80000 total - 500 already booked = 79500 available
             assertThat(response.availableSeats()).isEqualTo(79500);
-            assertThat(response.ticketPrice()).isEqualByComparingTo("200.00");
+            assertThat(response.ticketPrice()).isEqualByComparingTo("200");
         }
 
         @Test

@@ -1,11 +1,13 @@
 spring:
   application:
     name: goalhub
+  profiles:
+    default: dev
 
   datasource:
-    url: jdbc:mysql://localhost:3306/goalhub?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
-    username: root
-    password: "25112006"
+    url: ${DB_URL:jdbc:mysql://localhost:3306/goalhub?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -27,8 +29,11 @@ server:
 
 app:
   jwt:
-    secret: 3cfa76ef14937c1c0ea519f8fc057a80fcd04a7d3d7f4c3be5ba3a5e8e6a3d1f
-    expiration-ms: 86400000   # 24 hours
+    secret: ${JWT_SECRET:3cfa76ef14937c1c0ea519f8fc057a80fcd04a7d3d7f4c3be5ba3a5e8e6a3d1f}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}   # 24 hours
+  order:
+    hold-duration-minutes: ${ORDER_HOLD_DURATION_MINUTES:10}
+    cleanup-interval-ms: ${ORDER_CLEANUP_INTERVAL_MS:30000}
 
 logging:
   level:

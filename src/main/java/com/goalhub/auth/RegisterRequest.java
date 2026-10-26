@@ -20,6 +20,13 @@ public record RegisterRequest(
         @NotBlank(message = "Full name is required")
         String fullName,
 
-        /** Optional – defaults to USER if null. */
+        /**
+         * Optional client-supplied role. Ignored during public registration
+         * to prevent privilege escalation; all registered accounts are assigned Role.USER.
+         */
         Role role
-) {}
+) {
+    public RegisterRequest(String email, String password, String fullName) {
+        this(email, password, fullName, null);
+    }
+}

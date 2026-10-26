@@ -89,10 +89,15 @@ class OrderServiceTest {
     class CreateOrder {
 
         @Test
-        @DisplayName("creates order, marks seats RESERVED, decrements availableSeats")
+        @DisplayName("creates order, atomic SQL marks seats RESERVED, decrements availableSeats")
         void createsOrderSuccessfully() {
             when(matchRepository.findById(1L)).thenReturn(Optional.of(match));
             when(seatRepository.findAllById(List.of(10L, 11L))).thenReturn(List.of(seat1, seat2));
+            // Atomic branch: updateStatusIfStatusIs returns number of rows updated (= seat count)
+            when(seatRepository.updateStatusIfStatusIs(
+                    List.of(10L, 11L), SeatStatus.AVAILABLE, SeatStatus.RESERVED)).thenReturn(2);
+            // Atomic branch: decrementAvailableSeats returns 1 (success)
+            when(matchRepository.decrementAvailableSeats(1L, 2)).thenReturn(1);
 
             Order savedOrder = Order.builder()
                     .id(100L).user(userA).match(match)
@@ -118,11 +123,13 @@ class OrderServiceTest {
             assertThat(response.status()).isEqualTo(OrderStatus.PENDING);
             assertThat(response.items()).hasSize(2);
 
-            // Seats should be RESERVED
-            assertThat(seat1.getStatus()).isEqualTo(SeatStatus.RESERVED);
-            assertThat(seat2.getStatus()).isEqualTo(SeatStatus.RESERVED);
-            // availableSeats decremented by 2
-            assertThat(match.getAvailableSeats()).isEqualTo(998);
+            // Atomic strategy: seat status is updated directly in DB via SQL, not via entity mutation.
+            // Verify the atomic SQL methods were called with correct args.
+            verify(seatRepository).updateStatusIfStatusIs(
+                    List.of(10L, 11L), SeatStatus.AVAILABLE, SeatStatus.RESERVED);
+            verify(matchRepository).decrementAvailableSeats(1L, 2);
+            // Order is persisted
+            verify(orderRepository).save(any(Order.class));
         }
 
         @Test
@@ -279,6 +286,248 @@ class OrderServiceTest {
             assertThatThrownBy(() -> orderService.getOrderById(99L, userA))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Order");
+        }
+    }
+
+    // ─── payOrder ────────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("payOrder()")
+    class PayOrder {
+
+        private Order pendingOrder;
+
+        @BeforeEach
+        void setUp() {
+            seat1.setStatus(SeatStatus.RESERVED);
+            seat2.setStatus(SeatStatus.RESERVED);
+
+            pendingOrder = Order.builder()
+                    .id(1L)
+                    .user(userA)
+                    .match(match)
+                    .totalAmount(new BigDecimal("200.00"))
+                    .status(OrderStatus.PENDING)
+                    .expiresAt(LocalDateTime.now().plusMinutes(10))
+                    .items(new java.util.ArrayList<>())
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            pendingOrder.addItem(OrderItem.builder().id(101L).seat(seat1).priceAtBooking(seat1.getPrice()).build());
+            pendingOrder.addItem(OrderItem.builder().id(102L).seat(seat2).priceAtBooking(seat2.getPrice()).build());
+        }
+
+        @Test
+        @DisplayName("successful payment transitions order to PAID and seats to SOLD")
+        void payOrder_success() {
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.payOrder(1L, userA);
+
+            assertThat(response.status()).isEqualTo(OrderStatus.PAID);
+            assertThat(pendingOrder.getStatus()).isEqualTo(OrderStatus.PAID);
+            assertThat(seat1.getStatus()).isEqualTo(SeatStatus.SOLD);
+            assertThat(seat2.getStatus()).isEqualTo(SeatStatus.SOLD);
+            verify(seatRepository, times(2)).save(any(Seat.class));
+            verify(orderRepository).save(pendingOrder);
+        }
+
+        @Test
+        @DisplayName("paying an expired order auto-cancels order, releases seats, and throws BusinessException")
+        void payOrder_expired_autoCancelsAndRejects() {
+            pendingOrder.setExpiresAt(LocalDateTime.now().minusMinutes(1)); // expired!
+            match.setAvailableSeats(998); // 1000 - 2
+
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            assertThatThrownBy(() -> orderService.payOrder(1L, userA))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("expired");
+
+            assertThat(pendingOrder.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(seat1.getStatus()).isEqualTo(SeatStatus.AVAILABLE);
+            assertThat(seat2.getStatus()).isEqualTo(SeatStatus.AVAILABLE);
+            assertThat(match.getAvailableSeats()).isEqualTo(1000); // 998 + 2 restored
+            verify(seatRepository, times(2)).save(any(Seat.class));
+            verify(matchRepository).save(match);
+            verify(orderRepository).save(pendingOrder);
+        }
+
+        @Test
+        @DisplayName("paying non-PENDING order throws BusinessException")
+        void payOrder_notPending_throws() {
+            pendingOrder.setStatus(OrderStatus.PAID);
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+
+            assertThatThrownBy(() -> orderService.payOrder(1L, userA))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("PENDING");
+        }
+
+        @Test
+        @DisplayName("non-owner cannot pay for someone else's order (throws AccessDeniedException)")
+        void payOrder_nonOwner_throwsAccessDenied() {
+            User userB = User.builder().id(2L).email("userb@test.com").role(Role.USER).build();
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+
+            assertThatThrownBy(() -> orderService.payOrder(1L, userB))
+                    .isInstanceOf(AccessDeniedException.class);
+        }
+
+        @Test
+        @DisplayName("ADMIN can pay on behalf of user")
+        void payOrder_adminCanPay() {
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.payOrder(1L, admin);
+
+            assertThat(response.status()).isEqualTo(OrderStatus.PAID);
+            assertThat(seat1.getStatus()).isEqualTo(SeatStatus.SOLD);
+        }
+    }
+
+    // ─── cancelOrder ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("cancelOrder()")
+    class CancelOrder {
+
+        private Order pendingOrder;
+
+        @BeforeEach
+        void setUp() {
+            seat1.setStatus(SeatStatus.RESERVED);
+            seat2.setStatus(SeatStatus.RESERVED);
+            match.setAvailableSeats(998);
+
+            pendingOrder = Order.builder()
+                    .id(1L)
+                    .user(userA)
+                    .match(match)
+                    .totalAmount(new BigDecimal("200.00"))
+                    .status(OrderStatus.PENDING)
+                    .expiresAt(LocalDateTime.now().plusMinutes(10))
+                    .items(new java.util.ArrayList<>())
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            pendingOrder.addItem(OrderItem.builder().id(101L).seat(seat1).priceAtBooking(seat1.getPrice()).build());
+            pendingOrder.addItem(OrderItem.builder().id(102L).seat(seat2).priceAtBooking(seat2.getPrice()).build());
+        }
+
+        @Test
+        @DisplayName("owner can cancel order: order -> CANCELLED, seats -> AVAILABLE, availableSeats restored via atomic SQL")
+        void cancelOrder_success() {
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.cancelOrder(1L, userA);
+
+            assertThat(response.status()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(pendingOrder.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(seat1.getStatus()).isEqualTo(SeatStatus.AVAILABLE);
+            assertThat(seat2.getStatus()).isEqualTo(SeatStatus.AVAILABLE);
+            // Atomic SQL increment — in-memory match object is NOT updated by service.
+            // Verify the correct atomic call was made instead.
+            verify(matchRepository).incrementAvailableSeats(match.getId(), 2);
+            verify(matchRepository, never()).save(any());
+            verify(seatRepository, times(2)).save(any(Seat.class));
+            verify(orderRepository).save(pendingOrder);
+        }
+
+        @Test
+        @DisplayName("ADMIN can cancel user's order")
+        void cancelOrder_adminCanCancel() {
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+            when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.cancelOrder(1L, admin);
+
+            assertThat(response.status()).isEqualTo(OrderStatus.CANCELLED);
+            // Atomic SQL increment called for admin cancel too
+            verify(matchRepository).incrementAvailableSeats(match.getId(), 2);
+        }
+
+        @Test
+        @DisplayName("non-owner cannot cancel order (throws AccessDeniedException)")
+        void cancelOrder_nonOwner_throwsAccessDenied() {
+            User userB = User.builder().id(2L).email("userb@test.com").role(Role.USER).build();
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, userB))
+                    .isInstanceOf(AccessDeniedException.class);
+        }
+
+        @Test
+        @DisplayName("cancelling already PAID order throws BusinessException")
+        void cancelOrder_alreadyPaid_throws() {
+            pendingOrder.setStatus(OrderStatus.PAID);
+            when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(pendingOrder));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, userA))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Cannot cancel order");
+        }
+    }
+
+    // ─── releaseExpiredOrders ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("releaseExpiredOrders()")
+    class ReleaseExpiredOrders {
+
+        @Test
+        @DisplayName("releases all expired PENDING orders, restores seats and calls atomic incrementAvailableSeats")
+        void releaseExpiredOrders_success() {
+            seat1.setStatus(SeatStatus.RESERVED);
+            seat2.setStatus(SeatStatus.RESERVED);
+            match.setAvailableSeats(998);
+
+            Order expiredOrder = Order.builder()
+                    .id(1L)
+                    .user(userA)
+                    .match(match)
+                    .totalAmount(new BigDecimal("200.00"))
+                    .status(OrderStatus.PENDING)
+                    .expiresAt(LocalDateTime.now().minusMinutes(5))
+                    .items(new java.util.ArrayList<>())
+                    .build();
+
+            expiredOrder.addItem(OrderItem.builder().seat(seat1).build());
+            expiredOrder.addItem(OrderItem.builder().seat(seat2).build());
+
+            when(orderRepository.findExpiredOrders(eq(OrderStatus.PENDING), any(LocalDateTime.class)))
+                    .thenReturn(List.of(expiredOrder));
+
+            int released = orderService.releaseExpiredOrders();
+
+            assertThat(released).isEqualTo(1);
+            assertThat(expiredOrder.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(seat1.getStatus()).isEqualTo(SeatStatus.AVAILABLE);
+            assertThat(seat2.getStatus()).isEqualTo(SeatStatus.AVAILABLE);
+            // Atomic SQL increment — verify call, not in-memory match object
+            verify(matchRepository).incrementAvailableSeats(match.getId(), 2);
+            verify(matchRepository, never()).save(any());
+            verify(seatRepository, times(2)).save(any(Seat.class));
+            verify(orderRepository).save(expiredOrder);
+        }
+
+        @Test
+        @DisplayName("idempotent: returns 0 when no expired orders exist")
+        void releaseExpiredOrders_noExpiredOrders() {
+            when(orderRepository.findExpiredOrders(eq(OrderStatus.PENDING), any(LocalDateTime.class)))
+                    .thenReturn(List.of());
+
+            int released = orderService.releaseExpiredOrders();
+
+            assertThat(released).isEqualTo(0);
+            verify(orderRepository, never()).save(any());
+            verify(seatRepository, never()).save(any());
         }
     }
 }

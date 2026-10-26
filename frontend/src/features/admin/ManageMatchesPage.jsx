@@ -11,10 +11,10 @@ const EMPTY_FORM = {
 };
 
 const STATUS_CONFIG = {
-  UPCOMING:  { label: 'Sắp diễn ra', cls: 'bg-blue-50 text-blue-700 border-blue-100' },
-  ONGOING:   { label: 'Đang diễn ra', cls: 'bg-green-50 text-green-700 border-green-100' },
-  COMPLETED: { label: 'Đã kết thúc', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-  CANCELLED: { label: 'Đã huỷ', cls: 'bg-red-50 text-red-600 border-red-100' },
+  UPCOMING:  { label: 'Sắp diễn ra', bg: 'rgba(57,255,20,0.1)', color: '#39ff14', border: 'rgba(57,255,20,0.25)' },
+  ONGOING:   { label: 'Đang diễn ra', bg: 'rgba(255,76,0,0.1)', color: '#ff4c00', border: 'rgba(255,76,0,0.25)' },
+  COMPLETED: { label: 'Đã kết thúc', bg: 'rgba(255,255,255,0.05)', color: '#888', border: 'rgba(255,255,255,0.1)' },
+  CANCELLED: { label: 'Đã huỷ', bg: 'rgba(229,57,53,0.1)', color: '#e53935', border: 'rgba(229,57,53,0.25)' },
 };
 
 export default function ManageMatchesPage() {
@@ -48,52 +48,82 @@ export default function ManageMatchesPage() {
   }
 
   function openEdit(match) {
+    setEditingId(match.id);
+    const localIso = match.matchDate ? match.matchDate.slice(0, 16) : '';
     setForm({
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
-      matchDate: match.matchDate?.slice(0, 16) ?? '',
+      matchDate: localIso,
       venue: match.venue,
-      totalSeats: match.totalSeats,
-      ticketPrice: match.ticketPrice,
+      totalSeats: String(match.totalSeats),
+      ticketPrice: String(match.ticketPrice),
       status: match.status,
     });
-    setEditingId(match.id);
     setShowForm(true);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!form.homeTeam.trim() || !form.awayTeam.trim()) {
+      toast.error('Vui lòng nhập tên 2 đội');
+      return;
+    }
+    if (!form.matchDate) {
+      toast.error('Vui lòng chọn ngày giờ thi đấu');
+      return;
+    }
+    if (new Date(form.matchDate) <= new Date() && !editingId) {
+      toast.error('Thời gian thi đấu phải ở tương lai');
+      return;
+    }
+    if (!form.venue.trim()) {
+      toast.error('Vui lòng nhập sân vận động');
+      return;
+    }
+    if (Number(form.totalSeats) <= 0) {
+      toast.error('Tổng số ghế phải lớn hơn 0');
+      return;
+    }
+    if (Number(form.ticketPrice) <= 0) {
+      toast.error('Giá vé phải lớn hơn 0');
+      return;
+    }
+
     setSaving(true);
+    const payload = {
+      ...form,
+      matchDate: new Date(form.matchDate).toISOString(),
+      totalSeats: Number(form.totalSeats),
+      ticketPrice: Number(form.ticketPrice),
+    };
+
     try {
-      const payload = {
-        ...form,
-        totalSeats: Number(form.totalSeats),
-        ticketPrice: Number(form.ticketPrice),
-      };
       if (editingId) {
         await updateMatch(editingId, payload);
-        toast.success('✅ Đã cập nhật trận đấu');
+        toast.success('Cập nhật trận đấu thành công!');
       } else {
         await createMatch(payload);
-        toast.success('✅ Đã tạo trận đấu mới');
+        toast.success('Tạo trận đấu thành công! Các ghế đã được tự động tạo.');
       }
       setShowForm(false);
       loadMatches();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Thao tác thất bại');
+      const msg = err.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại.';
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id, name) {
-    if (!window.confirm(`Xoá trận "${name}"?`)) return;
+    if (!window.confirm(`Bạn có chắc muốn huỷ / xoá trận: ${name}?`)) return;
     try {
       await deleteMatch(id);
-      toast.success('Đã xoá trận đấu');
+      toast.success('Đã huỷ trận đấu thành công');
       loadMatches();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Xoá thất bại');
+      const msg = err.response?.data?.message || 'Không thể huỷ trận này';
+      toast.error(msg);
     }
   }
 
@@ -112,142 +142,153 @@ export default function ManageMatchesPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
-            <Link to="/" className="hover:text-blue-600 transition-colors">Trang chủ</Link>
-            <span>/</span>
-            <span className="text-slate-600">Quản lý trận đấu</span>
+    <div style={{ minHeight: '100vh', padding: '32px 0 60px' }}>
+      <div className="gt-container">
+        {/* Page header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '28px' }}>
+          <div>
+            <p className="gt-section-label">// Quản trị hệ thống</p>
+            <h1 className="gt-section-title" style={{ marginTop: '6px' }}>QUẢN LÝ TRẬN ĐẤU</h1>
+            <p style={{ color: '#666', fontSize: '13px', marginTop: '6px' }}>Tạo, chỉnh sửa và quản lý lịch thi đấu GoalTicket</p>
           </div>
-          <h1 className="text-2xl font-black text-slate-800" style={{ fontFamily: "'Outfit', sans-serif" }}>
-            🛠 Quản lý trận đấu
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">Tạo, chỉnh sửa và quản lý toàn bộ lịch thi đấu</p>
+          <button
+            id="btn-create-match"
+            onClick={openCreate}
+            className="gt-btn-primary"
+            style={{ padding: '12px 22px', fontSize: '14px' }}
+          >
+            + Tạo Trận Mới
+          </button>
         </div>
-        <button
-          id="btn-create-match"
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/25 hover:shadow-xl hover:-translate-y-0.5 shrink-0"
-        >
-          + Tạo trận mới
-        </button>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: 'Tổng trận', value: stats.total, icon: '⚽', color: 'text-slate-700' },
-          { label: 'Sắp diễn ra', value: stats.upcoming, icon: '📅', color: 'text-blue-700' },
-          { label: 'Đang diễn ra', value: stats.ongoing, icon: '🔴', color: 'text-green-700' },
-          { label: 'Đã kết thúc', value: stats.completed, icon: '✅', color: 'text-slate-500' },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span>{s.icon}</span>
-              <span className="text-xs text-slate-400 font-medium">{s.label}</span>
+        {/* Stats Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          {[
+            { label: 'Tổng trận đấu', value: stats.total, color: '#fff', icon: '⚽' },
+            { label: 'Sắp diễn ra', value: stats.upcoming, color: '#39ff14', icon: '📅' },
+            { label: 'Đang diễn ra', value: stats.ongoing, color: '#ff4c00', icon: '🔴' },
+            { label: 'Đã hoàn thành', value: stats.completed, color: '#888', icon: '✅' },
+          ].map(s => (
+            <div key={s.label} className="gt-card-flat" style={{ padding: '16px 20px', background: '#121212' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span>{s.icon}</span>
+                <span style={{ fontSize: '12px', color: '#666' }}>{s.label}</span>
+              </div>
+              <p style={{ fontSize: '24px', fontWeight: 900, color: s.color, fontFamily: "'Barlow', sans-serif" }}>
+                {s.value}
+              </p>
             </div>
-            <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <input
-          type="text"
-          placeholder="🔍 Tìm kiếm đội, sân vận động..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-3 focus:ring-blue-100 transition-all"
-        />
-        <select
-          value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value)}
-          className="border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-3 focus:ring-blue-100 transition-all bg-white text-slate-700"
-        >
-          <option value="">Tất cả trạng thái</option>
-          {Object.entries(STATUS_CONFIG).map(([val, conf]) => (
-            <option key={val} value={val}>{conf.label}</option>
           ))}
-        </select>
-      </div>
+        </div>
 
-      {/* Table */}
-      {loading ? (
-        <LoadingSpinner message="Đang tải danh sách trận..." />
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <input
+            className="gt-input"
+            style={{ maxWidth: '300px' }}
+            placeholder="🔍 Tìm kiếm đội, sân..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="gt-input"
+            style={{ width: 'auto', minWidth: '160px' }}
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">Tất cả trạng thái</option>
+            <option value="UPCOMING">Sắp diễn ra</option>
+            <option value="ONGOING">Đang diễn ra</option>
+            <option value="COMPLETED">Đã kết thúc</option>
+            <option value="CANCELLED">Đã huỷ</option>
+          </select>
+        </div>
+
+        {/* Table / List */}
+        {loading ? (
+          <LoadingSpinner message="Đang tải danh sách trận đấu..." />
+        ) : filtered.length === 0 ? (
+          <div className="gt-card-flat" style={{ textAlign: 'center', padding: '60px 20px', color: '#666' }}>
+            <p>Không có trận đấu nào phù hợp</p>
+          </div>
+        ) : (
+          <div className="gt-card-flat" style={{ padding: '0', overflowX: 'auto', background: '#121212' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  {['ID', 'Trận đấu', 'Thời gian', 'Sân vận động', 'Ghế trống', 'Giá vé', 'Trạng thái', 'Thao tác'].map(h => (
-                    <th key={h} className="px-4 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
+                <tr style={{ borderBottom: '1px solid #222', color: '#666', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  <th style={{ padding: '14px 18px' }}>Cặp Đấu</th>
+                  <th style={{ padding: '14px 18px' }}>Thời Gian</th>
+                  <th style={{ padding: '14px 18px' }}>Sân Vận Động</th>
+                  <th style={{ padding: '14px 18px' }}>Giá Vé</th>
+                  <th style={{ padding: '14px 18px' }}>Ghế Còn</th>
+                  <th style={{ padding: '14px 18px' }}>Trạng Thái</th>
+                  <th style={{ padding: '14px 18px', textAlign: 'right' }}>Thao Tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-slate-400">
-                      <div className="text-3xl mb-2">🏟</div>
-                      <p>Không tìm thấy trận đấu nào</p>
-                    </td>
-                  </tr>
-                ) : filtered.map((m) => {
-                  const conf = STATUS_CONFIG[m.status] || STATUS_CONFIG.UPCOMING;
+              <tbody>
+                {filtered.map(m => {
+                  const sc = STATUS_CONFIG[m.status] || STATUS_CONFIG.UPCOMING;
                   return (
-                    <tr key={m.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-4 py-3.5 text-slate-400 text-xs font-mono">#{m.id}</td>
-                      <td className="px-4 py-3.5">
-                        <p className="font-bold text-slate-800">
-                          {m.homeTeam} <span className="text-slate-300 font-normal">vs</span> {m.awayTeam}
-                        </p>
-                        {m.league && <p className="text-xs text-slate-400 mt-0.5">{m.league}</p>}
+                    <tr key={m.id} style={{ borderBottom: '1px solid #1a1a1a', transition: 'background 0.15s' }}>
+                      <td style={{ padding: '14px 18px' }}>
+                        <span style={{ fontWeight: 800, color: '#fff', fontSize: '14px' }}>{m.homeTeam}</span>
+                        <span style={{ color: '#555', fontSize: '12px', margin: '0 6px' }}>vs</span>
+                        <span style={{ fontWeight: 800, color: '#fff', fontSize: '14px' }}>{m.awayTeam}</span>
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">
+                      <td style={{ padding: '14px 18px', fontSize: '13px', color: '#aaa' }}>
                         {formatDate(m.matchDate)}
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-500 max-w-32 truncate">
+                      <td style={{ padding: '14px 18px', fontSize: '13px', color: '#aaa' }}>
                         {m.venue}
                       </td>
-                      <td className="px-4 py-3.5">
-                        <span className={`text-xs font-bold ${m.availableSeats === 0 ? 'text-red-500' : 'text-green-600'}`}>
-                          {m.availableSeats}
-                        </span>
-                        <span className="text-slate-300 text-xs"> / {m.totalSeats}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
+                      <td style={{ padding: '14px 18px', fontSize: '13px', color: '#39ff14', fontWeight: 700 }}>
                         {formatCurrency(m.ticketPrice)}
                       </td>
-                      <td className="px-4 py-3.5">
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${conf.cls}`}>
-                          {conf.label}
+                      <td style={{ padding: '14px 18px', fontSize: '13px', color: '#aaa' }}>
+                        {m.availableSeats ?? m.totalSeats} / {m.totalSeats}
+                      </td>
+                      <td style={{ padding: '14px 18px' }}>
+                        <span style={{
+                          background: sc.bg,
+                          color: sc.color,
+                          border: `1px solid ${sc.border}`,
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                        }}>
+                          {sc.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '8px' }}>
                           <Link
                             to={`/admin/matches/${m.id}/seats`}
-                            className="text-xs text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                            className="gt-btn-outline"
+                            style={{ fontSize: '11px', padding: '5px 10px' }}
                           >
-                            🪑 Ghế
+                            Ghế
                           </Link>
                           <button
                             onClick={() => openEdit(m)}
-                            className="text-xs text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                            className="gt-btn-outline"
+                            style={{ fontSize: '11px', padding: '5px 10px' }}
                           >
-                            ✏️ Sửa
+                            Sửa
                           </button>
                           <button
                             onClick={() => handleDelete(m.id, `${m.homeTeam} vs ${m.awayTeam}`)}
-                            className="text-xs text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                            style={{
+                              background: 'none',
+                              border: '1px solid rgba(229,57,53,0.3)',
+                              color: '#e53935',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
                           >
-                            🗑
+                            Huỷ
                           </button>
                         </div>
                       </td>
@@ -257,124 +298,141 @@ export default function ManageMatchesPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Create/Edit Modal ───────────── */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        {/* Create / Edit Modal */}
+        {showForm && (
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in-up"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.85)',
+              backdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              padding: '20px',
+            }}
           >
-            {/* Modal header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <h2 className="font-black text-lg text-slate-800" style={{ fontFamily: "'Outfit', sans-serif" }}>
-                {editingId ? '✏️ Chỉnh sửa trận đấu' : '+ Tạo trận đấu mới'}
-              </h2>
-              <button
-                onClick={() => setShowForm(false)}
-                className="text-slate-400 hover:text-slate-700 w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors text-lg"
-              >
-                ×
-              </button>
-            </div>
+            <div
+              className="gt-card animate-fade-in-up"
+              style={{
+                background: '#141414',
+                border: '1px solid #282828',
+                borderRadius: '16px',
+                maxWidth: '520px',
+                width: '100%',
+                padding: '24px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ fontFamily: "'Barlow', sans-serif", fontWeight: 800, fontSize: '18px', color: '#fff' }}>
+                  {editingId ? 'Cập Nhật Trận Đấu' : 'Tạo Trận Đấu Mới'}
+                </h3>
+                <button
+                  onClick={() => setShowForm(false)}
+                  style={{ background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Đội nhà', field: 'homeTeam', type: 'text', placeholder: 'Hà Nội FC' },
-                  { label: 'Đội khách', field: 'awayTeam', type: 'text', placeholder: 'Viettel FC' },
-                ].map(({ label, field, ...rest }) => (
-                  <div key={field}>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Đội Nhà</label>
+                    <input className="gt-input" value={form.homeTeam} onChange={set('homeTeam')} placeholder="Hà Nội FC" required />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Đội Khách</label>
+                    <input className="gt-input" value={form.awayTeam} onChange={set('awayTeam')} placeholder="TP.HCM FC" required />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Thời Gian Thi Đấu</label>
+                  <input
+                    type="datetime-local"
+                    className="gt-input"
+                    value={form.matchDate}
+                    onChange={set('matchDate')}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Sân Vận Động</label>
+                  <input className="gt-input" value={form.venue} onChange={set('venue')} placeholder="Mỹ Đình" required />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Tổng Số Ghế</label>
                     <input
-                      {...rest} required
-                      value={form[field]} onChange={set(field)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                      type="number"
+                      className="gt-input"
+                      value={form.totalSeats}
+                      onChange={set('totalSeats')}
+                      placeholder="100"
+                      min="1"
+                      required
+                      disabled={!!editingId}
                     />
                   </div>
-                ))}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Thời gian thi đấu</label>
-                <input
-                  type="datetime-local" required
-                  value={form.matchDate} onChange={set('matchDate')}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Sân vận động</label>
-                <input
-                  type="text" required
-                  value={form.venue} onChange={set('venue')}
-                  placeholder="Sân Vận Động Mỹ Đình"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tổng số ghế</label>
-                  <input
-                    type="number" min={1} required
-                    value={form.totalSeats} onChange={set('totalSeats')}
-                    placeholder="200"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                  />
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Giá Vé Cơ Bản (VNĐ)</label>
+                    <input
+                      type="number"
+                      className="gt-input"
+                      value={form.ticketPrice}
+                      onChange={set('ticketPrice')}
+                      placeholder="150000"
+                      min="1000"
+                      step="5000"
+                      required
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Giá vé (VNĐ)</label>
-                  <input
-                    type="number" min={0} required
-                    value={form.ticketPrice} onChange={set('ticketPrice')}
-                    placeholder="150000"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                  />
+
+                {editingId && (
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#888', display: 'block', marginBottom: '6px' }}>Trạng Thái</label>
+                    <select className="gt-input" value={form.status} onChange={set('status')}>
+                      <option value="UPCOMING">Sắp diễn ra</option>
+                      <option value="ONGOING">Đang diễn ra</option>
+                      <option value="COMPLETED">Đã kết thúc</option>
+                      <option value="CANCELLED">Đã huỷ</option>
+                    </select>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '12px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="gt-btn-ghost"
+                    style={{ fontSize: '13px' }}
+                  >
+                    Huỷ Bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="gt-btn-primary"
+                    style={{ fontSize: '13px', padding: '10px 20px' }}
+                  >
+                    {saving ? 'Đang lưu...' : editingId ? 'Lưu Thay Đổi' : 'Tạo Trận Đấu'}
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Trạng thái</label>
-                <select
-                  value={form.status} onChange={set('status')}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all bg-white"
-                >
-                  {Object.entries(STATUS_CONFIG).map(([val, conf]) => (
-                    <option key={val} value={val}>{conf.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:from-blue-300 disabled:to-blue-300 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/25"
-                >
-                  {saving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Đang lưu...
-                    </>
-                  ) : (
-                    editingId ? '✅ Cập nhật' : '+ Tạo trận đấu'
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors"
-                >
-                  Huỷ
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import com.goalhub.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +26,10 @@ import java.util.Random;
 
 /**
  * Seeds the database with demo data on application startup.
- * Only runs when the users table is empty (first-time setup).
+ * Only runs in dev profile when the users table is empty (first-time setup).
  */
 @Component
+@Profile("dev")
 @RequiredArgsConstructor
 @Slf4j
 public class DataSeeder implements CommandLineRunner {
@@ -103,6 +105,8 @@ public class DataSeeder implements CommandLineRunner {
 
         for (Match match : matches) {
             List<Seat> seats = new ArrayList<>();
+            BigDecimal basePrice = match.getTicketPrice();
+            BigDecimal vipPrice = basePrice.multiply(BigDecimal.valueOf(2));
 
             // VIP seats (3 rows × 20)
             for (String row : vipRows) {
@@ -112,7 +116,7 @@ public class DataSeeder implements CommandLineRunner {
                             .match(match)
                             .seatCode(row + col)
                             .seatClass(SeatClass.VIP)
-                            .price(BigDecimal.valueOf(300000))
+                            .price(vipPrice)
                             .status(st)
                             .build());
                 }
@@ -126,7 +130,7 @@ public class DataSeeder implements CommandLineRunner {
                             .match(match)
                             .seatCode(row + col)
                             .seatClass(SeatClass.STANDARD)
-                            .price(BigDecimal.valueOf(150000))
+                            .price(basePrice)
                             .status(st)
                             .build());
                 }

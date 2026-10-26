@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
  *   <li>{@code seatCode} is unique within a match (e.g., "A1", "VIP-03").
  *   <li>{@code price} is the seat-level price (may differ from match.ticketPrice
  *       for VIP upgrades etc.).
- *   <li>{@code version} column is included in the schema for future optimistic-locking
- *       support but is NOT annotated with {@code @Version} at this stage.
+ *   <li>{@code version} is annotated with {@code @Version} for Optimistic Locking support
+ *       (active when {@code app.concurrency-strategy=optimistic}).
  * </ul>
  */
 @Entity
@@ -51,8 +51,8 @@ public class Seat {
     @Column(name = "seat_class", nullable = false, length = 20)
     private SeatClass seatClass;
 
-    /** Seat-level price (may be different from match base price for VIP tiers). */
-    @Column(nullable = false, precision = 12, scale = 2)
+    /** Seat-level price – single source of truth for ticket pricing. */
+    @Column(nullable = false, precision = 12, scale = 0)
     private BigDecimal price;
 
     @Enumerated(EnumType.STRING)
@@ -61,10 +61,10 @@ public class Seat {
     private SeatStatus status = SeatStatus.AVAILABLE;
 
     /**
-     * Reserved for future optimistic-locking.
-     * Kept as a plain {@code BIGINT} column — {@code @Version} will be added
-     * when the Order module introduces concurrent booking.
+     * Optimistic-locking version field.
+     * Prevents concurrent double-booking of the same seat across transactions.
      */
+    @Version
     @Column(nullable = false)
     @Builder.Default
     private Long version = 0L;

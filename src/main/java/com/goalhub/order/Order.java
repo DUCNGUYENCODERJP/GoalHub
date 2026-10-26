@@ -42,7 +42,7 @@ public class Order {
     @JoinColumn(name = "match_id", nullable = false)
     private Match match;
 
-    @Column(name = "total_amount", nullable = false, precision = 14, scale = 2)
+    @Column(name = "total_amount", nullable = false, precision = 14, scale = 0)
     private BigDecimal totalAmount;
 
     @Enumerated(EnumType.STRING)
@@ -54,6 +54,9 @@ public class Order {
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
+    @Column(name = "expires_at", nullable = false)
+    private LocalDateTime expiresAt;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -64,6 +67,9 @@ public class Order {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (expiresAt == null) {
+            expiresAt = createdAt.plusMinutes(10);
+        }
     }
 
     @PreUpdate

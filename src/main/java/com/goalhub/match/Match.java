@@ -56,8 +56,11 @@ public class Match {
     @Column(nullable = false)
     private Integer availableSeats;
 
-    /** Base ticket price – snapshot of this will be stored in Order.price_at_booking. */
-    @Column(nullable = false, precision = 12, scale = 2)
+    /**
+     * Base ticket price ("giá từ") – displayed on match listings and cards.
+     * The actual booked price is determined by individual Seat.price.
+     */
+    @Column(nullable = false, precision = 12, scale = 0)
     private BigDecimal ticketPrice;
 
     @Column(nullable = false, updatable = false)

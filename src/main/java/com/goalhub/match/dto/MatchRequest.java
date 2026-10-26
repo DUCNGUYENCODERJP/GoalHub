@@ -37,7 +37,7 @@ public record MatchRequest(
         Integer totalSeats,
 
         @NotNull(message = "Ticket price is required")
-        @DecimalMin(value = "0.01", message = "Ticket price must be greater than 0")
-        @Digits(integer = 10, fraction = 2, message = "Invalid ticket price format")
+        @DecimalMin(value = "0", message = "Ticket price cannot be negative")
+        @Digits(integer = 12, fraction = 0, message = "Ticket price must be a whole number for VND")
         BigDecimal ticketPrice
 ) {}

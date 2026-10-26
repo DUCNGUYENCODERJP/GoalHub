@@ -34,4 +34,21 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             WHERE m.status = 'UPCOMING' AND m.availableSeats > 0
             """)
     long countAvailable();
+
+    /**
+     * Atomically decrement available seats directly at SQL engine level.
+     * Prevents lost updates and eliminates deadlocks caused by reading then writing back.
+     *
+     * @return 1 if successfully decremented, 0 if not enough available seats
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Match m SET m.availableSeats = m.availableSeats - :count WHERE m.id = :matchId AND m.availableSeats >= :count")
+    int decrementAvailableSeats(@Param("matchId") Long matchId, @Param("count") int count);
+
+    /**
+     * Atomically increment available seats (e.g. order cancelled or expired).
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Match m SET m.availableSeats = m.availableSeats + :count WHERE m.id = :matchId")
+    int incrementAvailableSeats(@Param("matchId") Long matchId, @Param("count") int count);
 }

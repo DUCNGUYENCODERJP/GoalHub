@@ -1,15 +1,15 @@
+import { formatCurrency } from '../utils/formatCurrency';
+
 /**
- * SeatMap — displays a grid of seats colour-coded by status.
+ * SeatMap — displays a grid of seats colour-coded by status with GoalTicket theme.
  *
  * Props:
  *  - seats: Array<{ id, seatCode, seatClass, price, status }>
  *  - selectedSeatIds: number[]
  *  - onSeatToggle: (seatId: number) => void
- *  - readonly: boolean  (true = no clicking)
- *  - maxSelect: number  (default 20)
+ *  - readonly: boolean
+ *  - maxSelect: number
  */
-import { formatCurrency } from '../utils/formatCurrency';
-
 export default function SeatMap({
   seats = [],
   selectedSeatIds = [],
@@ -19,9 +19,9 @@ export default function SeatMap({
 }) {
   if (!seats.length) {
     return (
-      <div className="text-center py-12">
-        <div className="text-4xl mb-3">🪑</div>
-        <p className="text-slate-400 text-sm">Chưa có ghế nào cho trận này.</p>
+      <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
+        <div style={{ fontSize: '36px', marginBottom: '12px' }}>🪑</div>
+        <p style={{ fontSize: '13px' }}>Chưa có ghế nào cho trận này.</p>
       </div>
     );
   }
@@ -40,27 +40,18 @@ export default function SeatMap({
   function handleClick(seat) {
     if (readonly) return;
     if (seat.status !== 'AVAILABLE') return;
-    if (!isSelected(seat.id) && atMax) {
-      return;
-    }
+    if (!isSelected(seat.id) && atMax) return;
     onSeatToggle?.(seat.id);
   }
 
-  function seatCls(seat) {
-    if (isSelected(seat.id)) return 'seat-selected';
+  function getSeatClass(seat) {
+    if (isSelected(seat.id)) return 'gt-seat selected';
     if (seat.status === 'AVAILABLE') {
-      return seat.seatClass === 'VIP' ? 'seat-available-vip' : 'seat-available-std';
+      return seat.seatClass === 'VIP' ? 'gt-seat available vip' : 'gt-seat available';
     }
-    if (seat.status === 'RESERVED') return 'seat-reserved';
-    if (seat.status === 'SOLD') return 'seat-sold';
-    return 'bg-slate-100 border-slate-200';
-  }
-
-  function seatCursor(seat) {
-    if (readonly) return 'cursor-default';
-    if (seat.status !== 'AVAILABLE') return 'cursor-not-allowed';
-    if (!isSelected(seat.id) && atMax) return 'cursor-not-allowed';
-    return 'cursor-pointer';
+    if (seat.status === 'RESERVED') return 'gt-seat reserved';
+    if (seat.status === 'SOLD') return 'gt-seat sold';
+    return 'gt-seat';
   }
 
   const vipCount = seats.filter(s => s.seatClass === 'VIP' && s.status === 'AVAILABLE').length;
@@ -69,18 +60,18 @@ export default function SeatMap({
   const stdPrice = seats.find(s => s.seatClass === 'STANDARD')?.price;
 
   return (
-    <div className="space-y-5">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Legend */}
-      <div className="flex flex-wrap gap-3">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
         {[
-          { cls: 'seat-available-std', label: 'Thường — Trống', price: stdPrice, count: stdCount },
-          { cls: 'seat-available-vip', label: 'VIP — Trống', price: vipPrice, count: vipCount },
-          { cls: 'seat-selected', label: 'Đang chọn' },
-          { cls: 'seat-reserved', label: 'Đã giữ' },
-          { cls: 'seat-sold', label: 'Đã bán' },
+          { cls: 'gt-seat available', label: 'Thường — Trống', price: stdPrice, count: stdCount },
+          { cls: 'gt-seat available vip', label: 'VIP — Trống', price: vipPrice, count: vipCount },
+          { cls: 'gt-seat selected', label: 'Đang chọn' },
+          { cls: 'gt-seat reserved', label: 'Đã giữ' },
+          { cls: 'gt-seat sold', label: 'Đã bán' },
         ].map(({ cls, label, price, count }) => (
-          <div key={label} className="flex items-center gap-2 text-xs text-slate-500">
-            <div className={`w-5 h-5 rounded-md border-2 ${cls} flex-shrink-0`} />
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#888' }}>
+            <div className={cls} style={{ width: '22px', height: '22px', cursor: 'default', transform: 'none', pointerEvents: 'none' }} />
             <span>
               {label}
               {price != null && ` (${formatCurrency(price)})`}
@@ -91,26 +82,28 @@ export default function SeatMap({
       </div>
 
       {/* Seat grid */}
-      <div className="overflow-x-auto pb-2">
-        <div className="space-y-2 min-w-max">
+      <div style={{ overflowX: 'auto', paddingBottom: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 'max-content' }}>
           {Object.entries(rows).map(([rowKey, rowSeats]) => (
-            <div key={rowKey} className="flex items-center gap-2">
-              <span className="w-12 text-right text-slate-400 text-xs font-mono font-bold shrink-0">
+            <div key={rowKey} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '36px', textAlign: 'right', color: '#666', fontSize: '11px', fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>
                 {rowKey}
               </span>
-              <div className="flex gap-1.5">
+              <div style={{ display: 'flex', gap: '4px' }}>
                 {rowSeats.map((seat) => (
                   <button
                     key={seat.id}
                     title={`${seat.seatCode} | ${seat.seatClass} | ${formatCurrency(seat.price)} | ${seat.status}`}
                     onClick={() => handleClick(seat)}
                     disabled={seat.status !== 'AVAILABLE' || readonly || (!isSelected(seat.id) && atMax)}
-                    className={`
-                      w-8 h-8 rounded-lg border-2 text-[10px] font-mono font-bold
-                      transition-all duration-150 select-none
-                      ${seatCls(seat)} ${seatCursor(seat)}
-                      ${isSelected(seat.id) ? 'scale-110 shadow-lg' : 'hover:scale-105'}
-                    `}
+                    className={getSeatClass(seat)}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      fontSize: '10px',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                    }}
                   >
                     {seat.seatCode.replace(rowKey, '')}
                   </button>
@@ -123,12 +116,20 @@ export default function SeatMap({
 
       {/* Selection counter */}
       {!readonly && (
-        <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
-          atMax ? 'bg-orange-50 text-orange-700 border border-orange-100' : 'bg-slate-50 text-slate-500'
-        }`}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '12px',
+          padding: '10px 14px',
+          borderRadius: '8px',
+          background: atMax ? 'rgba(255,76,0,0.1)' : 'rgba(255,255,255,0.03)',
+          color: atMax ? '#ff4c00' : '#888',
+          border: atMax ? '1px solid rgba(255,76,0,0.3)' : '1px solid #222'
+        }}>
           <span>{atMax ? '⚠️' : '💡'}</span>
           <span>
-            Đã chọn <strong className="text-slate-700">{selectedSeatIds.length}</strong> / tối đa {maxSelect} ghế
+            Đã chọn <strong style={{ color: '#fff' }}>{selectedSeatIds.length}</strong> / tối đa {maxSelect} ghế
             {atMax && ' — Bạn đã chọn tối đa số ghế cho phép'}
           </span>
         </div>

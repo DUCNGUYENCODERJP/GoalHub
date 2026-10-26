@@ -110,6 +110,27 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    /** 409 – Concurrency conflict (Optimistic Locking failure / Seat conflict) */
+    @ExceptionHandler({
+            com.goalhub.exception.SeatConflictException.class,
+            org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+            jakarta.persistence.OptimisticLockException.class
+    })
+    public ResponseEntity<ErrorResponse> handleConcurrencyConflict(
+            Exception ex, HttpServletRequest request) {
+        log.warn("Concurrency conflict at {}: {}", request.getRequestURI(), ex.getMessage());
+        String userMessage = (ex instanceof com.goalhub.exception.SeatConflictException)
+                ? ex.getMessage()
+                : "Ghế đã được người khác đặt. Vui lòng chọn ghế khác.";
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(
+                        HttpStatus.CONFLICT.value(),
+                        "Conflict",
+                        userMessage,
+                        request.getRequestURI()
+                ));
+    }
+
     /** 500 – Unexpected errors */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(

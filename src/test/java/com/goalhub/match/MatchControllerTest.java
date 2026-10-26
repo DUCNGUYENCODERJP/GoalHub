@@ -136,7 +136,7 @@ class MatchControllerTest {
                 MatchStatus.UPCOMING,
                 75000,
                 75000,
-                new BigDecimal("150.00"),
+                new BigDecimal("150"),
                 LocalDateTime.now(),
                 LocalDateTime.now()
         );
@@ -148,7 +148,7 @@ class MatchControllerTest {
                 "Old Trafford",
                 MatchStatus.UPCOMING,
                 75000,
-                new BigDecimal("150.00")
+                new BigDecimal("150")
         );
     }
 
@@ -265,7 +265,7 @@ class MatchControllerTest {
                     "Old Trafford",
                     MatchStatus.UPCOMING,
                     75000,
-                    new BigDecimal("150.00")
+                    new BigDecimal("150")
             );
 
             mockMvc.perform(post("/api/matches")

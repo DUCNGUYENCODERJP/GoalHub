@@ -1,10 +1,48 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import toast from 'react-hot-toast';
+
+/* Live ticker data */
+const TICKER_ITEMS = [
+  { home: 'B', homeScore: 3, away: 'CLB Phú Thọ', awayScore: 2, status: 'KT' },
+  { home: 'Hải Phòng', homeScore: 2, away: 'SLNA', awayScore: 1, status: '67', live: true },
+  { home: 'Bình Định', homeScore: 0, away: 'Khánh Hòa', awayScore: 0, status: '23', live: true },
+  { home: 'Hà Nội B', homeScore: 3, away: 'CLB Phú Thọ', awayScore: 2, status: 'KT' },
+];
+
+function LiveTicker() {
+  // duplicate items for seamless loop
+  const items = [...TICKER_ITEMS, ...TICKER_ITEMS];
+  return (
+    <div className="gt-ticker-wrap">
+      <div className="gt-ticker-live">
+        <span className="dot" />
+        LIVE
+      </div>
+      <div style={{ overflow: 'hidden', flex: 1 }}>
+        <div className="gt-ticker-scroll">
+          {items.map((item, i) => (
+            <div key={i} className="gt-ticker-item">
+              <span>{item.home}</span>
+              <span className="score">{item.homeScore} – {item.awayScore}</span>
+              <span>{item.away}</span>
+              {item.live
+                ? <span className="live-badge">{item.status}&apos;</span>
+                : <span className="kt-badge">KT</span>
+              }
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Navbar() {
   const { isAuthenticated, isAdmin, user, logout } = useAuth();
+  const { openCart, totalItemCount } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
@@ -16,9 +54,7 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   function handleLogout() {
     logout();
@@ -30,176 +66,164 @@ export default function Navbar() {
 
   return (
     <>
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? 'bg-[#0a0f1e]/95 backdrop-blur-md shadow-2xl border-b border-white/10'
-            : 'bg-[#0a0f1e]'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-green-400 flex items-center justify-center text-lg shadow-lg group-hover:scale-105 transition-transform">
-                ⚽
-              </div>
-              <span
-                className="text-xl font-black tracking-tight text-white"
-                style={{ fontFamily: "'Outfit', sans-serif" }}
-              >
-                Goal<span className="text-green-400">Hub</span>
-              </span>
-            </Link>
+      <LiveTicker />
+      <nav className={`gt-navbar ${scrolled ? 'scrolled' : ''}`}>
+        <div className="gt-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: '100%' }}>
+          {/* Logo */}
+          <Link to="/" className="gt-logo">
+            <div className="gt-logo-icon">⚽</div>
+            <span className="gt-logo-text">GOAL<span>TICKET</span></span>
+          </Link>
 
-            {/* Desktop Nav */}
-            <div className="hidden md:flex items-center gap-1">
-              <NavLink to="/" active={isActive('/')}>Trận đấu</NavLink>
-
-              {isAuthenticated && (
-                <NavLink to="/orders/my" active={isActive('/orders/my')}>
-                  Đơn hàng
-                </NavLink>
-              )}
-
-              {isAdmin && (
-                <NavLink to="/admin/matches" active={location.pathname.startsWith('/admin')}>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                    Quản lý
-                  </span>
-                </NavLink>
-              )}
-            </div>
-
-            {/* Auth area */}
-            <div className="hidden md:flex items-center gap-3">
-              {isAuthenticated ? (
-                <>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
-                      {user?.fullName?.charAt(0) || 'U'}
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-white text-xs font-medium leading-none">{user?.fullName}</span>
-                      {isAdmin && (
-                        <span className="text-[10px] bg-yellow-400/20 text-yellow-300 px-1.5 py-0.5 rounded mt-0.5 font-bold uppercase leading-none">
-                          Admin
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="text-sm text-slate-400 hover:text-white border border-white/10 hover:border-white/30 px-4 py-1.5 rounded-lg transition-all"
-                  >
-                    Đăng xuất
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="text-sm text-slate-300 hover:text-white px-4 py-1.5 rounded-lg transition-colors"
-                  >
-                    Đăng nhập
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-semibold px-4 py-1.5 rounded-lg transition-all shadow-lg shadow-blue-900/40"
-                  >
-                    Đăng ký miễn phí
-                  </Link>
-                </>
-              )}
-            </div>
-
-            {/* Mobile hamburger */}
-            <button
-              className="md:hidden text-white p-2"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Mở menu"
-            >
-              <div className={`w-5 h-0.5 bg-white mb-1 transition-all ${mobileOpen ? 'rotate-45 translate-y-1.5' : ''}`} />
-              <div className={`w-5 h-0.5 bg-white mb-1 transition-all ${mobileOpen ? 'opacity-0' : ''}`} />
-              <div className={`w-5 h-0.5 bg-white transition-all ${mobileOpen ? '-rotate-45 -translate-y-1.5' : ''}`} />
-            </button>
+          {/* Desktop Nav */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} className="nav-desktop">
+            <Link to="/" className={`gt-nav-link ${isActive('/') ? 'active' : ''}`}>Trang Chủ</Link>
+            <Link to="/lich-dau" className={`gt-nav-link ${isActive('/lich-dau') ? 'active' : ''}`}>Lịch Đấu</Link>
+            <Link to="/tin-tuc" className={`gt-nav-link ${isActive('/tin-tuc') ? 'active' : ''}`}>Tin Tức</Link>
+            {isAuthenticated && (
+              <>
+                <Link to="/orders/my" className={`gt-nav-link ${isActive('/orders/my') ? 'active' : ''}`}>Vé Của Tôi</Link>
+                <Link to="/profile" className={`gt-nav-link ${isActive('/profile') ? 'active' : ''}`}>Hồ Sơ</Link>
+              </>
+            )}
+            {isAdmin && (
+              <Link to="/admin/matches" className={`gt-nav-link ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fbbf24', animation: 'blink 1s infinite' }} />
+                  Quản lý
+                </span>
+              </Link>
+            )}
           </div>
+
+          {/* Auth area */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} className="nav-desktop">
+            {/* Interactive Cart Drawer Trigger */}
+            <button
+              onClick={openCart}
+              title="Giỏ vé"
+              style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: '#141414',
+                border: '1px solid #222',
+                color: '#ddd',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#39ff14'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = '#222'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <line x1="2" y1="10" x2="22" y2="10"/>
+                <circle cx="6" cy="15" r="1"/>
+                <circle cx="10" cy="15" r="1"/>
+              </svg>
+              {totalItemCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  background: '#39ff14',
+                  color: '#000',
+                  fontSize: '10px',
+                  fontWeight: 900,
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 6px rgba(57,255,20,0.6)',
+                }}>
+                  {totalItemCount}
+                </span>
+              )}
+            </button>
+
+            {isAuthenticated ? (
+              <>
+                <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #39ff14, #1a8a00)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 800, fontSize: '13px', color: '#000', border: '2px solid transparent',
+                    transition: 'border-color 0.2s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#39ff14'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}
+                  >
+                    {user?.fullName?.charAt(0) || 'U'}
+                  </div>
+                </Link>
+                <button onClick={handleLogout} className="gt-btn-outline" style={{ fontSize: '12px', padding: '6px 14px' }}>
+                  Đăng xuất
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="gt-btn-ghost">Đăng nhập</Link>
+                <Link to="/register" className="gt-btn-primary">Đăng ký</Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            style={{ display: 'none', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '8px' }}
+            className="nav-mobile-toggle"
+            aria-label="Mở menu"
+          >
+            <div style={{ width: '20px', height: '2px', background: '#fff', marginBottom: '4px', transition: 'all 0.2s', transform: mobileOpen ? 'rotate(45deg) translateY(6px)' : 'none' }} />
+            <div style={{ width: '20px', height: '2px', background: '#fff', marginBottom: '4px', transition: 'all 0.2s', opacity: mobileOpen ? 0 : 1 }} />
+            <div style={{ width: '20px', height: '2px', background: '#fff', transition: 'all 0.2s', transform: mobileOpen ? 'rotate(-45deg) translateY(-6px)' : 'none' }} />
+          </button>
         </div>
 
         {/* Mobile Menu */}
-        <div
-          className={`md:hidden overflow-hidden transition-all duration-300 ${
-            mobileOpen ? 'max-h-96 border-t border-white/10' : 'max-h-0'
-          }`}
-        >
-          <div className="px-4 py-4 space-y-2 bg-[#0d1633]">
-            <MobileNavLink to="/" active={isActive('/')}>⚽ Trận đấu</MobileNavLink>
+        {mobileOpen && (
+          <div style={{
+            position: 'absolute', top: '60px', left: 0, right: 0,
+            background: '#0d0d0d', borderBottom: '1px solid #2a2a2a',
+            padding: '12px 16px', zIndex: 200
+          }}>
+            <Link to="/" className={`gt-nav-link ${isActive('/') ? 'active' : ''}`} style={{ display: 'block', marginBottom: '4px' }}>Trang Chủ</Link>
+            <Link to="/lich-dau" className={`gt-nav-link ${isActive('/lich-dau') ? 'active' : ''}`} style={{ display: 'block', marginBottom: '4px' }}>Lịch Đấu</Link>
+            <Link to="/tin-tuc" className={`gt-nav-link ${isActive('/tin-tuc') ? 'active' : ''}`} style={{ display: 'block', marginBottom: '4px' }}>Tin Tức</Link>
             {isAuthenticated && (
-              <MobileNavLink to="/orders/my" active={isActive('/orders/my')}>📋 Đơn hàng của tôi</MobileNavLink>
+              <>
+                <Link to="/orders/my" className="gt-nav-link" style={{ display: 'block', marginBottom: '4px' }}>🎟️ Vé Của Tôi</Link>
+                <Link to="/profile" className="gt-nav-link" style={{ display: 'block', marginBottom: '4px' }}>👤 Hồ Sơ</Link>
+              </>
             )}
-            {isAdmin && (
-              <MobileNavLink to="/admin/matches" active={location.pathname.startsWith('/admin')}>🛠 Quản lý</MobileNavLink>
-            )}
-            <div className="pt-2 border-t border-white/10">
+            <div style={{ borderTop: '1px solid #2a2a2a', marginTop: '8px', paddingTop: '8px' }}>
               {isAuthenticated ? (
-                <div className="space-y-2">
-                  <p className="text-slate-400 text-sm px-3">{user?.fullName}</p>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left text-sm text-red-400 hover:text-red-300 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
-                  >
-                    Đăng xuất
-                  </button>
-                </div>
+                <button onClick={handleLogout} className="gt-btn-outline" style={{ width: '100%' }}>Đăng xuất</button>
               ) : (
-                <div className="space-y-2">
-                  <Link to="/login" className="block text-sm text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
-                    Đăng nhập
-                  </Link>
-                  <Link to="/register" className="block text-sm bg-blue-600 hover:bg-blue-500 text-white font-semibold px-3 py-2 rounded-lg transition-colors text-center">
-                    Đăng ký miễn phí
-                  </Link>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Link to="/login" className="gt-btn-ghost">Đăng nhập</Link>
+                  <Link to="/register" className="gt-btn-primary">Đăng ký</Link>
                 </div>
               )}
             </div>
           </div>
-        </div>
+        )}
       </nav>
 
-      {/* Navbar spacer */}
-      <div className="h-16" />
+      <style>{`
+        @media (max-width: 768px) {
+          .nav-desktop { display: none !important; }
+          .nav-mobile-toggle { display: block !important; }
+        }
+      `}</style>
     </>
-  );
-}
-
-function NavLink({ to, active, children }) {
-  return (
-    <Link
-      to={to}
-      className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-        active
-          ? 'text-white bg-white/10'
-          : 'text-slate-400 hover:text-white hover:bg-white/5'
-      }`}
-    >
-      {children}
-      {active && (
-        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-green-400" />
-      )}
-    </Link>
-  );
-}
-
-function MobileNavLink({ to, active, children }) {
-  return (
-    <Link
-      to={to}
-      className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-        active ? 'bg-blue-600/20 text-blue-400' : 'text-slate-300 hover:text-white hover:bg-white/5'
-      }`}
-    >
-      {children}
-    </Link>
   );
 }

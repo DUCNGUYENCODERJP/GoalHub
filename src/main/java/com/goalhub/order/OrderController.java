@@ -59,4 +59,29 @@ public class OrderController {
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(orderService.getOrderById(id, currentUser));
     }
+
+    /**
+     * POST /api/orders/{id}/pay
+     * Simulate successful payment.
+     * Transitions order to PAID and seats to SOLD.
+     * Rejects if order has expired or is no longer PENDING.
+     */
+    @PostMapping("/{id}/pay")
+    public ResponseEntity<OrderResponse> payOrder(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(orderService.payOrder(id, currentUser));
+    }
+
+    /**
+     * POST /api/orders/{id}/cancel
+     * Cancel order by owner or ADMIN.
+     * Releases seats back to AVAILABLE and restores match availableSeats.
+     */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<OrderResponse> cancelOrder(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(orderService.cancelOrder(id, currentUser));
+    }
 }
