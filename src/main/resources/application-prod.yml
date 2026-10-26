@@ -1,0 +1,43 @@
+# ════════════════════════════════════════════════════════════════
+# GoalHub — PRODUCTION profile overrides
+# Activate: SPRING_PROFILES_ACTIVE=prod  (or --spring.profiles.active=prod)
+#
+# REQUIRED environment variables (no defaults — startup FAILS without them):
+#   DB_URL          e.g. jdbc:mysql://prod-host:3306/goalhub?useSSL=true&...
+#   DB_USERNAME     database username
+#   DB_PASSWORD     database password  ← MUST be rotated from dev value
+#   JWT_SECRET      min 256-bit hex string (64 hex chars)
+#
+# Optional overrides (have sensible defaults in application.yml):
+#   HIKARI_MAX_POOL_SIZE    default 10
+#   ORDER_HOLD_DURATION_MINUTES  default 10
+# ════════════════════════════════════════════════════════════════
+
+spring:
+  datasource:
+    # No defaults → Spring fails immediately at startup if not set.
+    # Error: "Could not resolve placeholder 'DB_URL' in value '${DB_URL}'"
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      # NEVER use 'update' or 'create' in production.
+      # Use 'validate' so Hibernate checks schema matches entities,
+      # but never alters the DB automatically.
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+app:
+  jwt:
+    # No default → startup fails if JWT_SECRET env var is missing.
+    secret: ${JWT_SECRET}
+
+logging:
+  level:
+    com.goalhub: INFO
+    org.springframework.security: WARN
