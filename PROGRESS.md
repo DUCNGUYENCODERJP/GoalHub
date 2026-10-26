@@ -108,3 +108,25 @@ Tài liệu theo dõi tiến độ từng bước theo định hướng chống 
   - **Kết quả kiểm thử:** `Tests run: 105, Failures: 0, Errors: 0, Skipped: 11` (`BUILD SUCCESS`, ~24s).
     - 11 skipped = tất cả Testcontainers test (Docker không chạy lúc test): `MySQLDatabaseSmokeTest`(1), `SeatContentionTest`(2), `SeatContentionBenchmarkTest`(1), `SeatContentionStressTest`(3), `OrderLifecycleIntegrationTest`(4).
     - Khi Docker chạy: tất cả 11 test này thực thi trên MySQL 8.0 container thật.
+    - *(Sau khi thêm Bước 7: 110 tests, xem bên dưới.)*
+
+- [x] **BƯỚC 7 — Production profile fail-fast (`JWT_SECRET`, `DB_PASSWORD`)**
+
+  - **Chiến lược 2 lớp:**
+    - **Layer 1 — Spring placeholder:** [`application-prod.yml`](file:///d:/GoalHub/src/main/resources/application-prod.yml) dùng `${DB_URL}`, `${DB_USERNAME}`, `${DB_PASSWORD}`, `${JWT_SECRET}` **không có giá trị mặc định**. Spring ném `IllegalArgumentException` trước khi bất kỳ bean nào được khởi tạo nếu thiếu biến.
+    - **Layer 2 — Validator rõ ràng:** [`ProductionStartupValidator.java`](file:///d:/GoalHub/src/main/java/com/goalhub/config/ProductionStartupValidator.java) — `@Component @Profile("prod")` + `@PostConstruct`: kiểm tra tất cả vars **cùng một lúc**, kiểm tra `JWT_SECRET >= 64 ký tự (256 bit)`, in error box với danh sách đầy đủ mọi biến còn thiếu.
+
+  - **`application-prod.yml` còn override:**
+    - `spring.jpa.hibernate.ddl-auto: validate` (không dùng `update`/`create` trong production).
+    - `show-sql: false`, logging xuống `INFO`.
+
+  - **Kích hoạt:** `SPRING_PROFILES_ACTIVE=prod` (hoặc `--spring.profiles.active=prod`).
+
+  - **Kiểm thử** ([`ProductionStartupValidatorTest.java`](file:///d:/GoalHub/src/test/java/com/goalhub/config/ProductionStartupValidatorTest.java), 5 test, dùng `system-stubs-jupiter` để mock env vars):
+    - ✅ Không throw khi đủ vars và `JWT_SECRET` >= 64 chars.
+    - ✅ Throw `IllegalStateException` chứa `DB_PASSWORD` khi thiếu.
+    - ✅ Throw khi thiếu `JWT_SECRET`.
+    - ✅ Throw khi `JWT_SECRET` < 64 ký tự.
+    - ✅ Throw liệt kê **tất cả** vars thiếu cùng một lần (không dừng ở biến đầu tiên).
+
+  - **Kết quả kiểm thử:** `Tests run: 110, Failures: 0, Errors: 0, Skipped: 11` (`BUILD SUCCESS`, ~23s).
