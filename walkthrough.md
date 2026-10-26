@@ -287,3 +287,18 @@ Chạy qua [SeatContentionStressTest.java](file:///d:/GoalHub/src/test/java/com/
 ### 6.5. Kiểm thử Rollback Nguyên Tử
 
 Đặt 3 ghế [A, B, C] mà ghế B đã bị đặt trước → **toàn bộ đơn rollback 100%**. Ghế A và C vẫn AVAILABLE, không ghế nào bị giữ nửa chừng.
+
+---
+
+## 7. Kiến Trúc Đồng Bộ Frontend & Nguồn Sự Thật Duy Nhất (Single Source of Truth)
+
+- **Nguyên tắc cốt lõi**: Server là nguồn sự thật duy nhất cho giá, tổng tiền, trạng thái ghế và thời hạn giữ chỗ. Client không bao giờ tự tính tiền hay tự cộng/trừ phí ảo.
+- **Luồng Đặt Vé Trực Tiếp**:
+  1. Người dùng chọn ghế cụ thể trên sơ đồ khán đài (`MatchDetailPage.jsx`). Ghế được phân loại chuẩn `VIP` và `STANDARD` tương thích với `SeatClass` backend.
+  2. Bấm **"Tiến hành đặt vé"** → gọi trực tiếp `POST /api/orders` với `seatIds` đã chọn. Backend thực hiện khóa ghế nguyên tử (Atomic SQL).
+  3. Sau khi khóa thành công, chuyển hướng người dùng đến `OrderDetailPage.jsx` (`/orders/{id}`) hiển thị thông tin vé, danh sách ghế, tổng tiền chính xác từ server, cùng đồng hồ đếm ngược giữ chỗ theo `order.expiresAt`.
+- **Thanh toán & Huỷ đơn thực tế**:
+  - Nút **"Xác nhận thanh toán"** gọi `POST /api/orders/{id}/pay` chuyển trạng thái đơn sang `PAID`, ghế sang `SOLD`.
+  - Nút **"Huỷ đơn hàng"** gọi `POST /api/orders/{id}/cancel` giải phóng ngay lập tức ghế về `AVAILABLE` và phục hồi `availableSeats`.
+  - Nếu quá hạn `expiresAt`, đơn tự động huỷ và thông báo ghế đã được giải phóng.
+

@@ -16,7 +16,6 @@ export default function CartDrawer() {
     selectedAddons,
     availableAddons,
     promoCode,
-    discountPercent,
     discountAmount,
     processingFee,
     ticketSubtotal,
@@ -53,6 +52,13 @@ export default function CartDrawer() {
       return;
     }
 
+    if (!selectedSeats || selectedSeats.length === 0) {
+      toast.error('Vui lòng chọn ít nhất 1 ghế cụ thể trên sơ đồ trận đấu.');
+      closeCart();
+      if (matchData?.id) navigate(`/matches/${matchData.id}`);
+      return;
+    }
+
     setCheckingOut(true);
     try {
       const seatIds = selectedSeats.map(s => s.id);
@@ -61,6 +67,7 @@ export default function CartDrawer() {
         seatIds: seatIds,
       });
       closeCart();
+      clearCart();
       toast.success('🎉 Đơn hàng đã được khởi tạo!');
       navigate(`/orders/${order.id}`);
     } catch (err) {

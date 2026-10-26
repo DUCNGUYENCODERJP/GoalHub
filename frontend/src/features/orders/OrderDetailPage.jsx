@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { getOrderById } from '../../api/orderApi';
+import { getOrderById, payOrder, cancelOrder } from '../../api/orderApi';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { formatCurrency } from '../../utils/formatCurrency';
 
@@ -17,7 +17,7 @@ function getTeamColor(name = '') {
 }
 function TeamAvatar({ name, size = 48 }) {
   const [c1, c2] = getTeamColor(name);
-  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const initials = name ? name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : 'GH';
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
@@ -37,86 +37,154 @@ const PAYMENT_METHODS = [
 
 const CHECKOUT_STEPS = ['Chọn trận', 'Chọn ghế', 'Thanh toán', 'Xác nhận'];
 
+function computeSecondsRemaining(expiresAt) {
+  if (!expiresAt) return 0;
+  const expiryTime = new Date(expiresAt).getTime();
+  const now = Date.now();
+  return Math.max(0, Math.floor((expiryTime - now) / 1000));
+}
+
 export default function OrderDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [payMethod, setPayMethod] = useState('vnpay');
-  const [promoCode, setPromoCode] = useState('');
-  const [promoApplied, setPromoApplied] = useState(false);
-  const [buyerInfo, setBuyerInfo] = useState({ name: '', phone: '', email: '', cccd: '' });
   const [paying, setPaying] = useState(false);
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const timerRef = useRef(null);
 
   useEffect(() => {
+    let isMounted = true;
     getOrderById(id)
-      .then(setOrder)
+      .then(data => {
+        if (!isMounted) return;
+        setOrder(data);
+        if (data.status === 'PENDING' && data.expiresAt) {
+          setTimeLeft(computeSecondsRemaining(data.expiresAt));
+        }
+      })
       .catch(err => {
         const msg = err.response?.status === 403
           ? 'Bạn không có quyền xem đơn hàng này.'
           : 'Không tìm thấy đơn hàng.';
         toast.error(msg);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => { isMounted = false; };
   }, [id]);
 
-  function handlePayment() {
+  // Real countdown timer based on server's expiresAt
+  useEffect(() => {
+    if (!order || order.status !== 'PENDING' || !order.expiresAt) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+
+    timerRef.current = setInterval(() => {
+      const remaining = computeSecondsRemaining(order.expiresAt);
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(timerRef.current);
+        toast.error('⏱️ Thời gian giữ chỗ đã hết! Đơn hàng đã tự động huỷ.');
+        // Refresh order status from server
+        getOrderById(id).then(setOrder).catch(console.error);
+      }
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [order?.status, order?.expiresAt, id]);
+
+  async function handlePayment() {
     setPaying(true);
-    setTimeout(() => {
-      setPaying(false);
-      setPaymentCompleted(true);
+    try {
+      const updatedOrder = await payOrder(id);
+      setOrder(updatedOrder);
       toast.success('🎉 Thanh toán thành công! Vé đã được xác nhận.');
-    }, 700);
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Thanh toán thất bại, vui lòng thử lại.';
+      toast.error(msg);
+      // Refresh order to reflect actual status
+      getOrderById(id).then(setOrder).catch(console.error);
+    } finally {
+      setPaying(false);
+    }
   }
 
-  if (loading) return <LoadingSpinner message="Đang tải đơn hàng..." />;
+  async function handleCancel() {
+    if (!window.confirm('Bạn có chắc muốn huỷ đơn hàng này? Ghế sẽ được giải phóng ngay lập tức.')) {
+      return;
+    }
 
-  if (!order) return (
-    <div style={{ textAlign: 'center', padding: '80px 20px', color: '#888' }}>
-      <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎟</div>
-      <p style={{ marginBottom: '12px' }}>Không tìm thấy đơn hàng.</p>
-      <Link to="/orders/my" style={{ color: '#39ff14', fontSize: '14px' }}>← Về vé của tôi</Link>
-    </div>
-  );
+    setCancelling(true);
+    try {
+      const updatedOrder = await cancelOrder(id);
+      setOrder(updatedOrder);
+      toast.success('Đơn hàng đã được huỷ thành công.');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Không thể huỷ đơn hàng.';
+      toast.error(msg);
+    } finally {
+      setCancelling(false);
+    }
+  }
 
-  const isPaid = order.status === 'PAID';
-  const isPending = order.status === 'PENDING';
+  if (loading) return <LoadingSpinner message="Đang tải thông tin đơn hàng..." />;
 
-  // If order is PAID or user just completed checkout → show confirmation page
-  if (isPaid || paymentCompleted) return <ConfirmationPage order={order} />;
+  if (!order) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 20px', color: '#888' }}>
+        <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎟</div>
+        <p style={{ marginBottom: '12px' }}>Không tìm thấy đơn hàng.</p>
+        <Link to="/orders/my" style={{ color: '#39ff14', fontSize: '14px' }}>← Về vé của tôi</Link>
+      </div>
+    );
+  }
 
-  // Processing fee
-  const processingFee = Math.round(order.totalAmount * 0.02);
-  const discountAmt = promoApplied ? Math.round(order.totalAmount * 0.2) : 0;
-  const grandTotal = order.totalAmount + processingFee - discountAmt;
+  if (order.status === 'PAID') {
+    return <ConfirmationPage order={order} />;
+  }
 
-  const seatCodes = order.items?.map(i => i.seatCode).join(', ') || '—';
-  const seatClass = order.items?.[0]?.seatClass || 'STANDARD';
+  if (order.status === 'CANCELLED') {
+    return <CancelledPage order={order} />;
+  }
 
-  // Step = 3 (Thanh toán) for pending
-  const currentStep = 3;
+  // PENDING state
+  const timerMins = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+  const timerSecs = String(timeLeft % 60).padStart(2, '0');
+  const timerUrgent = timeLeft < 120; // under 2 minutes
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: '60px' }}>
       <div className="gt-container">
-        {/* Back */}
+        {/* Back Link */}
         <div style={{ padding: '20px 0 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Link to={`/`} style={{ color: '#888', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            ← Quay lại chọn ghế
-          </Link>
+          <button
+            onClick={() => navigate(-1)}
+            style={{ background: 'none', border: 'none', color: '#888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            ← Quay lại
+          </button>
         </div>
 
         {/* Title + Steps */}
         <div style={{ marginBottom: '28px' }}>
-          <p className="gt-section-label">// Thanh toán</p>
+          <p className="gt-section-label">// Thanh toán đơn #{order.id}</p>
           <h1 className="gt-section-title" style={{ marginTop: '8px', marginBottom: '20px' }}>HOÀN TẤT ĐẶT VÉ</h1>
 
           {/* Steps */}
           <div className="gt-steps">
             {CHECKOUT_STEPS.map((step, i) => {
               const stepNum = i + 1;
-              const isDone = stepNum < currentStep;
-              const isActive = stepNum === currentStep;
+              const isDone = stepNum < 3;
+              const isActive = stepNum === 3;
               return (
                 <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < CHECKOUT_STEPS.length - 1 ? 1 : 'none' }}>
                   <div className="gt-step">
@@ -134,55 +202,38 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '20px', alignItems: 'start' }}>
-          {/* Left column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Buyer info */}
-            <div className="gt-card-flat" style={{ padding: '20px' }}>
-              <p style={{ fontWeight: 700, fontSize: '13px', color: '#39ff14', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '16px' }}>
-                Thông Tin Người Mua
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '6px' }}>Họ và tên</label>
-                  <input
-                    className="gt-input"
-                    placeholder="Nguyễn Văn An"
-                    value={buyerInfo.name}
-                    onChange={e => setBuyerInfo({ ...buyerInfo, name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '6px' }}>Số điện thoại</label>
-                  <input
-                    className="gt-input"
-                    placeholder="0901 234 567"
-                    value={buyerInfo.phone}
-                    onChange={e => setBuyerInfo({ ...buyerInfo, phone: e.target.value })}
-                  />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '6px' }}>Email</label>
-                  <input
-                    className="gt-input"
-                    type="email"
-                    placeholder="email@example.com"
-                    value={buyerInfo.email}
-                    onChange={e => setBuyerInfo({ ...buyerInfo, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', color: '#666', display: 'block', marginBottom: '6px' }}>CCCD / CMND</label>
-                  <input
-                    className="gt-input"
-                    placeholder="001234567890"
-                    value={buyerInfo.cccd}
-                    onChange={e => setBuyerInfo({ ...buyerInfo, cccd: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
+        {/* Real Countdown Alert from Server */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            padding: '14px 18px',
+            marginBottom: '20px',
+            borderRadius: '12px',
+            background: timerUrgent ? 'rgba(229,57,53,0.1)' : 'rgba(57,255,20,0.06)',
+            border: `1px solid ${timerUrgent ? 'rgba(229,57,53,0.4)' : 'rgba(57,255,20,0.2)'}`,
+          }}
+        >
+          <span style={{ fontSize: '24px' }}>{timerUrgent ? '⚠️' : '⏱️'}</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '12px', color: timerUrgent ? '#e53935' : '#39ff14', fontWeight: 700 }}>
+              {timerUrgent ? 'SẮP HẾT THỜI GIAN GIỮ CHỖ!' : 'Ghế đang được hệ thống giữ chỗ cho bạn'}
+            </p>
+            <p style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+              Thời hạn giữ chỗ máy chủ: {order.expiresAt ? new Date(order.expiresAt).toLocaleTimeString('vi-VN') : '—'}. Vui lòng thanh toán trước khi hết hạn.
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontFamily: 'monospace', fontSize: '24px', fontWeight: 900, color: timerUrgent ? '#e53935' : '#39ff14' }}>
+              {timerMins}:{timerSecs}
+            </span>
+          </div>
+        </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '20px', alignItems: 'start' }}>
+          {/* Left Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* Payment methods */}
             <div className="gt-card-flat" style={{ padding: '20px' }}>
               <p style={{ fontWeight: 700, fontSize: '13px', color: '#39ff14', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '16px' }}>
@@ -195,7 +246,6 @@ export default function OrderDetailPage() {
                     className={`gt-payment-option ${payMethod === pm.id ? 'selected' : ''}`}
                     onClick={() => setPayMethod(pm.id)}
                   >
-                    {/* Radio */}
                     <div style={{
                       width: '18px', height: '18px', borderRadius: '50%',
                       border: `2px solid ${payMethod === pm.id ? '#39ff14' : '#444'}`,
@@ -215,47 +265,35 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            {/* Promo code */}
-            <div className="gt-card-flat" style={{ padding: '20px' }}>
-              <p style={{ fontWeight: 700, fontSize: '13px', color: '#39ff14', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '14px' }}>
-                Mã Khuyến Mãi
-              </p>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input
-                  className="gt-input"
-                  placeholder="GOALVN20"
-                  value={promoCode}
-                  onChange={e => setPromoCode(e.target.value.toUpperCase())}
-                  style={{ letterSpacing: '0.06em', fontWeight: 600 }}
-                />
-                <button
-                  onClick={() => {
-                    if (promoCode === 'GOALVN20') { setPromoApplied(true); toast.success('Mã giảm giá đã được áp dụng!'); }
-                    else toast.error('Mã không hợp lệ');
-                  }}
-                  className="gt-btn-primary"
-                  style={{ flexShrink: 0, padding: '10px 20px' }}
-                >
-                  Áp dụng
-                </button>
+            {/* Cancel Action */}
+            <div className="gt-card-flat" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: '#ccc' }}>Không muốn giữ ghế này nữa?</p>
+                <p style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>Bạn có thể huỷ đơn ngay để giải phóng ghế cho người hâm mộ khác.</p>
               </div>
-              {promoApplied && (
-                <p style={{ fontSize: '12px', color: '#39ff14', marginTop: '8px' }}>
-                  ✓ Giảm 20% – Tiết kiệm {formatCurrency(discountAmt)}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={cancelling || paying}
+                className="gt-btn-ghost"
+                style={{ color: '#e53935', borderColor: 'rgba(229,57,53,0.3)', padding: '8px 16px', fontSize: '12px' }}
+              >
+                {cancelling ? 'Đang huỷ...' : 'Huỷ đơn hàng'}
+              </button>
             </div>
           </div>
 
-          {/* Right column: Summary */}
+          {/* Right Column: Server-verified Summary */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '80px' }}>
             <div className="gt-card-flat" style={{ padding: '20px' }}>
-              <p style={{ fontWeight: 700, fontSize: '13px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '16px' }}>Tóm Tắt</p>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '16px' }}>
+                Chi Tiết Đơn Hàng (Xác Thực Từ Máy Chủ)
+              </p>
 
               {/* Match info */}
               <div style={{ background: '#1a1a1a', borderRadius: '10px', padding: '14px', marginBottom: '12px' }}>
                 <span className="gt-badge-league" style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '4px', marginBottom: '8px', display: 'inline-block' }}>
-                  {order.league || 'V.LEAGUE 1'}
+                  V.LEAGUE 1
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
                   <p style={{ fontWeight: 700, color: '#fff', fontSize: '13px' }}>{order.homeTeam}</p>
@@ -264,48 +302,40 @@ export default function OrderDetailPage() {
                 </div>
                 <p style={{ fontSize: '11px', color: '#555', marginTop: '6px' }}>
                   {order.matchDate ? new Date(order.matchDate).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                  {' · Sân Mỹ Đình'}
                 </p>
               </div>
 
-              {/* Seat info */}
+              {/* Items Breakdown from Server */}
               <div style={{ background: '#1a1a1a', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div>
-                    <p style={{ fontSize: '11px', color: '#666' }}>{seatClass}</p>
-                    <p style={{ fontSize: '13px', color: '#ccc', fontWeight: 600 }}>{order.items?.length || 1} ghế · {seatCodes}</p>
-                  </div>
-                  <p style={{ fontWeight: 700, color: '#39ff14' }}>{formatCurrency(order.totalAmount)} đ/vé</p>
+                <p style={{ fontSize: '11px', color: '#888', fontWeight: 600, marginBottom: '8px' }}>
+                  DANH SÁCH GHẾ ({order.items?.length || 0})
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {order.items?.map(item => (
+                    <div key={item.orderItemId || item.seatId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: '#ccc' }}>
+                        Ghế <strong style={{ color: '#39ff14' }}>{item.seatCode}</strong> ({item.seatClass})
+                      </span>
+                      <span style={{ color: '#fff', fontWeight: 600 }}>
+                        {formatCurrency(item.priceAtBooking)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Price breakdown */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#888' }}>
-                  <span>Tiền vé</span>
-                  <span style={{ color: '#ccc' }}>{formatCurrency(order.totalAmount)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#888' }}>
-                  <span>Phí xử lý (2%)</span>
-                  <span style={{ color: '#ccc' }}>{formatCurrency(processingFee)}</span>
-                </div>
-                {promoApplied && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#39ff14' }}>
-                    <span>Mã GOALVN20 (−20%)</span>
-                    <span>−{formatCurrency(discountAmt)}</span>
-                  </div>
-                )}
-              </div>
-
+              {/* Total from Server (Rule #2: Single Source of Truth) */}
               <div style={{ borderTop: '1px solid #2a2a2a', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <span style={{ fontWeight: 800, color: '#fff', fontSize: '15px' }}>TỔNG</span>
-                <span style={{ fontWeight: 900, color: '#39ff14', fontSize: '20px' }}>{formatCurrency(grandTotal)}</span>
+                <span style={{ fontWeight: 800, color: '#fff', fontSize: '15px' }}>TỔNG THANH TOÁN</span>
+                <span style={{ fontWeight: 900, color: '#39ff14', fontSize: '22px' }}>
+                  {formatCurrency(order.totalAmount)}
+                </span>
               </div>
 
               <button
                 className="gt-btn-primary"
                 style={{ width: '100%', justifyContent: 'center', fontSize: '14px', padding: '14px', borderRadius: '8px' }}
-                disabled={paying}
+                disabled={paying || cancelling || timeLeft <= 0}
                 onClick={handlePayment}
               >
                 {paying ? (
@@ -314,35 +344,29 @@ export default function OrderDetailPage() {
                     Đang xử lý giao dịch...
                   </span>
                 ) : (
-                  `THANH TOÁN ${formatCurrency(grandTotal)} →`
+                  `XÁC NHẬN THANH TOÁN ${formatCurrency(order.totalAmount)} →`
                 )}
               </button>
-              <p style={{ textAlign: 'center', fontSize: '11px', color: '#444', marginTop: '10px' }}>
-                🔒 Bảo mật SSL 256-bit · PCI DSS
+              <p style={{ textAlign: 'center', fontSize: '11px', color: '#555', marginTop: '10px' }}>
+                🔒 Giao dịch bảo mật · Trực tiếp Spring Boot API
               </p>
             </div>
           </div>
         </div>
       </div>
-
-      <style>{`
-        @media (max-width: 768px) {
-          .checkout-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
     </div>
   );
 }
 
-/* ── Confirmation Page with Order Timeline & Ticket Transfer ── */
+/* ── Confirmation Page when order.status === 'PAID' ── */
 function ConfirmationPage({ order }) {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferInfo, setTransferInfo] = useState({ name: '', phone: '', email: '' });
   const [transferredTo, setTransferredTo] = useState(null);
 
-  const seatCodes = order.items?.map(i => i.seatCode).join(', ') || 'A5, A6';
-  const seatClass = order.items?.[0]?.seatClass || 'VIP';
-  const ticketCode = `GT-${new Date().getFullYear()}-${order.id ? String(order.id).padStart(4, '0') : 'INHX0S'}`;
+  const seatCodes = order.items?.map(i => i.seatCode).join(', ') || '—';
+  const seatClass = order.items?.[0]?.seatClass || 'STANDARD';
+  const ticketCode = `GT-2026-${String(order.id).padStart(4, '0')}`;
   const matchDate = order.matchDate ? new Date(order.matchDate) : null;
 
   function handleTransferSubmit(e) {
@@ -353,75 +377,26 @@ function ConfirmationPage({ order }) {
     }
     setTransferredTo(transferInfo.name);
     setShowTransferModal(false);
-    toast.success(`🎉 Đã chuyển nhượng vé thành công cho ${transferInfo.name}! Mã xác nhận đã gửi đến ${transferInfo.phone || transferInfo.email}.`);
+    toast.success(`🎉 Đã chuyển nhượng vé thành công cho ${transferInfo.name}!`);
   }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', textAlign: 'center' }}>
-      {/* Check icon */}
       <div className="gt-confirm-check" style={{ marginBottom: '20px' }}>✓</div>
 
-      <p className="gt-section-label" style={{ marginBottom: '8px' }}>// Thanh toán thành công</p>
+      <p className="gt-section-label" style={{ marginBottom: '8px' }}>// Trạng thái đơn: ĐÃ THANH TOÁN (PAID)</p>
       <h1 style={{ fontFamily: "'Barlow', sans-serif", fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 900, color: '#fff', marginBottom: '8px', letterSpacing: '-0.02em' }}>
         VÉ ĐÃ XÁC NHẬN!
       </h1>
       <p style={{ color: '#888', fontSize: '14px', marginBottom: '28px' }}>
-        Vé điện tử đã gửi về email. Quý khách xuất trình mã QR tại cổng sân để vào khán đài.
+        Vé điện tử đã được ghi nhận trên hệ thống. Quý khách xuất trình mã QR tại cổng để vào khán đài.
       </p>
-
-      {/* E-Commerce Order Tracking Timeline */}
-      <div
-        className="gt-card-flat"
-        style={{
-          maxWidth: '520px',
-          width: '100%',
-          padding: '16px 20px',
-          marginBottom: '24px',
-          background: '#141414',
-          borderRadius: '12px',
-        }}
-      >
-        <p style={{ fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', marginBottom: '14px' }}>
-          Tiến Trình Đơn Hàng #{ticketCode}
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', textAlign: 'center' }}>
-          {[
-            { step: '1. Đặt chỗ', status: 'done', icon: '✓' },
-            { step: '2. Thanh toán', status: 'done', icon: '✓' },
-            { step: '3. Vé QR', status: 'done', icon: '✓' },
-            { step: '4. Vào cổng', status: 'pending', icon: '⏳' },
-          ].map((t) => (
-            <div key={t.step} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <div
-                style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: t.status === 'done' ? '#39ff14' : '#222',
-                  color: t.status === 'done' ? '#000' : '#888',
-                  fontSize: '11px',
-                  fontWeight: 900,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {t.icon}
-              </div>
-              <span style={{ fontSize: '10px', color: t.status === 'done' ? '#fff' : '#666', fontWeight: 600 }}>
-                {t.step}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Ticket Card */}
       <div className="gt-card-flat" style={{ maxWidth: '520px', width: '100%', padding: '24px', marginBottom: '24px', textAlign: 'left', background: '#141414', borderRadius: '16px' }}>
-        {/* League */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <span className="gt-badge-league" style={{ fontSize: '9px', padding: '2px 8px', borderRadius: '4px' }}>
-            {order.league || 'V.LEAGUE 1'} · VÒNG 22
+            V.LEAGUE 1 · ĐƠN #{order.id}
           </span>
           {transferredTo && (
             <span style={{ fontSize: '11px', color: '#ff6b2b', background: 'rgba(255,107,43,0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(255,107,43,0.3)' }}>
@@ -433,44 +408,36 @@ function ConfirmationPage({ order }) {
         {/* Teams */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div style={{ textAlign: 'center' }}>
-            <TeamAvatar name={order.homeTeam || 'HN'} size={52} />
-            <p style={{ color: '#fff', fontWeight: 700, fontSize: '13px', marginTop: '8px' }}>{order.homeTeam || 'Hà Nội FC'}</p>
+            <TeamAvatar name={order.homeTeam} size={52} />
+            <p style={{ color: '#fff', fontWeight: 700, fontSize: '13px', marginTop: '8px' }}>{order.homeTeam}</p>
           </div>
           <span style={{ color: '#555', fontSize: '18px', fontWeight: 700 }}>VS</span>
           <div style={{ textAlign: 'center' }}>
-            <TeamAvatar name={order.awayTeam || 'HCM'} size={52} />
-            <p style={{ color: '#fff', fontWeight: 700, fontSize: '13px', marginTop: '8px' }}>{order.awayTeam || 'TP.HCM FC'}</p>
+            <TeamAvatar name={order.awayTeam} size={52} />
+            <p style={{ color: '#fff', fontWeight: 700, fontSize: '13px', marginTop: '8px' }}>{order.awayTeam}</p>
           </div>
         </div>
 
-        {/* Date / Time / Venue */}
+        {/* Date / Time / Total */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '20px' }}>
           {[
-            { label: 'Ngày', value: matchDate ? `${matchDate.getDate()}/${matchDate.getMonth() + 1}` : '27/09' },
-            { label: 'Giờ', value: matchDate ? matchDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '19:00' },
-            { label: 'Sân', value: 'Mỹ Đình' },
+            { label: 'Ngày', value: matchDate ? `${matchDate.getDate()}/${matchDate.getMonth() + 1}` : '—' },
+            { label: 'Giờ', value: matchDate ? matchDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '—' },
+            { label: 'Tổng tiền', value: formatCurrency(order.totalAmount) },
           ].map(info => (
             <div key={info.label} style={{ background: '#1c1c1c', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
               <p style={{ fontSize: '10px', color: '#666', marginBottom: '4px', textTransform: 'uppercase' }}>{info.label}</p>
-              <p style={{ fontWeight: 700, color: '#fff', fontSize: '14px' }}>{info.value}</p>
+              <p style={{ fontWeight: 700, color: '#fff', fontSize: '13px' }}>{info.value}</p>
             </div>
           ))}
         </div>
 
         {/* QR Matrix + Code */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#1c1c1c', borderRadius: '10px', padding: '16px' }}>
-          {/* Stylized QR Box */}
           <div style={{
-            width: '72px',
-            height: '72px',
-            background: '#000',
-            border: '2px solid rgba(57,255,20,0.4)',
-            borderRadius: '8px',
-            padding: '4px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: '3px',
-            flexShrink: 0,
+            width: '72px', height: '72px', background: '#000',
+            border: '2px solid rgba(57,255,20,0.4)', borderRadius: '8px',
+            padding: '4px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', flexShrink: 0,
           }}>
             {[...Array(25)].map((_, idx) => (
               <div
@@ -484,10 +451,9 @@ function ConfirmationPage({ order }) {
           </div>
 
           <div style={{ flex: 1 }}>
-            <p style={{ fontSize: '10px', color: '#666', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mã đặt chỗ</p>
+            <p style={{ fontSize: '10px', color: '#666', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mã vé điện tử</p>
             <p style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '16px', color: '#39ff14' }}>{ticketCode}</p>
-            <p style={{ fontSize: '12px', color: '#aaa', marginTop: '4px' }}>{seatClass} · {seatCodes}</p>
-            <p style={{ fontWeight: 800, color: '#fff', fontSize: '14px', marginTop: '4px' }}>{formatCurrency(order.totalAmount || 500000)}</p>
+            <p style={{ fontSize: '12px', color: '#aaa', marginTop: '4px' }}>{seatClass} · Ghế: {seatCodes}</p>
           </div>
         </div>
       </div>
@@ -497,7 +463,7 @@ function ConfirmationPage({ order }) {
         <button
           className="gt-btn-primary"
           style={{ fontSize: '13px', padding: '12px 20px' }}
-          onClick={() => toast.success('Đang tạo và tải file PDF vé điện tử độ phân giải cao...')}
+          onClick={() => toast.success('Đang tạo và tải file PDF vé điện tử...')}
         >
           📥 Tải Vé PDF
         </button>
@@ -508,14 +474,6 @@ function ConfirmationPage({ order }) {
           onClick={() => setShowTransferModal(true)}
         >
           🎁 Chuyển Vé Cho Bạn Bè
-        </button>
-
-        <button
-          className="gt-btn-ghost"
-          style={{ fontSize: '13px', padding: '12px 18px', color: '#aaa' }}
-          onClick={() => toast.success('Yêu cầu xuất hoá đơn VAT đã được gửi đến kế toán!')}
-        >
-          🧾 Xuất Hoá Đơn VAT
         </button>
       </div>
 
@@ -528,35 +486,22 @@ function ConfirmationPage({ order }) {
         </Link>
       </div>
 
-      {/* Transfer Ticket Modal */}
+      {/* Transfer Modal */}
       {showTransferModal && (
         <div
           style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.85)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '20px',
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: '20px',
           }}
           onClick={() => setShowTransferModal(false)}
         >
           <div
             className="gt-card animate-fade-in-up"
             style={{
-              background: '#141414',
-              border: '1px solid #282828',
-              borderRadius: '16px',
-              maxWidth: '420px',
-              width: '100%',
-              padding: '24px',
-              textAlign: 'left',
+              background: '#141414', border: '1px solid #282828',
+              borderRadius: '16px', maxWidth: '420px', width: '100%', padding: '24px', textAlign: 'left',
             }}
             onClick={e => e.stopPropagation()}
           >
@@ -575,10 +520,6 @@ function ConfirmationPage({ order }) {
               </button>
             </div>
 
-            <p style={{ fontSize: '12px', color: '#888', marginBottom: '16px' }}>
-              Người nhận sẽ nhận được mã QR vé điện tử chính thức qua SMS và Email để tự do quét vé vào sân.
-            </p>
-
             <form onSubmit={handleTransferSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '4px' }}>Họ và tên người nhận *</label>
@@ -590,9 +531,8 @@ function ConfirmationPage({ order }) {
                   required
                 />
               </div>
-
               <div>
-                <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '4px' }}>Số điện thoại người nhận *</label>
+                <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '4px' }}>Số điện thoại hoặc Email *</label>
                 <input
                   className="gt-input"
                   placeholder="0912 345 678"
@@ -601,18 +541,6 @@ function ConfirmationPage({ order }) {
                   required
                 />
               </div>
-
-              <div>
-                <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '4px' }}>Email người nhận (để nhận QR PDF)</label>
-                <input
-                  className="gt-input"
-                  type="email"
-                  placeholder="namtran@example.com"
-                  value={transferInfo.email}
-                  onChange={e => setTransferInfo({ ...transferInfo, email: e.target.value })}
-                />
-              </div>
-
               <div style={{ display: 'flex', gap: '8px', marginTop: '12px', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
@@ -634,6 +562,43 @@ function ConfirmationPage({ order }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Cancelled Page when order.status === 'CANCELLED' ── */
+function CancelledPage({ order }) {
+  const seatCodes = order.items?.map(i => i.seatCode).join(', ') || '—';
+
+  return (
+    <div style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', textAlign: 'center' }}>
+      <div style={{
+        width: '64px', height: '64px', borderRadius: '50%',
+        background: 'rgba(229,57,53,0.15)', border: '2px solid #e53935',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '28px', color: '#e53935', marginBottom: '20px'
+      }}>
+        ✕
+      </div>
+
+      <p className="gt-section-label" style={{ color: '#e53935', marginBottom: '8px' }}>
+        // Đơn hàng đã huỷ (CANCELLED)
+      </p>
+      <h1 style={{ fontFamily: "'Barlow', sans-serif", fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 900, color: '#fff', marginBottom: '12px' }}>
+        ĐƠN HÀNG #{order.id} ĐÃ HUỶ
+      </h1>
+      <p style={{ color: '#888', fontSize: '14px', maxWidth: '480px', marginBottom: '24px', lineHeight: 1.6 }}>
+        Đơn hàng này đã bị huỷ hoặc quá thời hạn giữ chỗ. Tất cả ghế ({seatCodes}) đã được hệ thống tự động giải phóng về trạng thái trống cho người khác đặt.
+      </p>
+
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <Link to={`/matches/${order.matchId}`} className="gt-btn-primary" style={{ padding: '12px 24px', textDecoration: 'none' }}>
+          🏟 Đặt lại ghế trận này
+        </Link>
+        <Link to="/orders/my" className="gt-btn-outline" style={{ padding: '12px 24px', textDecoration: 'none' }}>
+          Vé của tôi
+        </Link>
+      </div>
     </div>
   );
 }

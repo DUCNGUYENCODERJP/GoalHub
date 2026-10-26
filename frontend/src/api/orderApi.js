@@ -25,3 +25,14 @@ export async function createOrder({ matchId, seatIds }) {
   const { data } = await axiosInstance.post('/orders', { matchId, seatIds });
   return data;
 }
+
+export async function payOrder(id) {
+  const { data } = await axiosInstance.post(`/orders/${id}/pay`);
+  return data;
+}
+
+export async function cancelOrder(id) {
+  const { data } = await axiosInstance.post(`/orders/${id}/cancel`);
+  return data;
+}
+

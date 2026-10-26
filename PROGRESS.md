@@ -130,3 +130,38 @@ Tài liệu theo dõi tiến độ từng bước theo định hướng chống 
     - ✅ Throw liệt kê **tất cả** vars thiếu cùng một lần (không dừng ở biến đầu tiên).
 
   - **Kết quả kiểm thử:** `Tests run: 110, Failures: 0, Errors: 0, Skipped: 11` (`BUILD SUCCESS`, ~23s).
+
+- [x] **BƯỚC 8 — Đồng bộ Frontend với API Backend & Chuẩn hóa Nguồn sự thật (Single Source of Truth)**
+
+  - **Cập nhật API Client ([`orderApi.js`](file:///d:/GoalHub/frontend/src/api/orderApi.js)):**
+    - Thêm `payOrder(id)` gọi `POST /api/orders/{id}/pay`.
+    - Thêm `cancelOrder(id)` gọi `POST /api/orders/{id}/cancel`.
+
+  - **Chuẩn hóa Server là nguồn sự thật duy nhất (Rule #2):**
+    - **[`OrderDetailPage.jsx`](file:///d:/GoalHub/frontend/src/features/orders/OrderDetailPage.jsx):**
+      - Xóa bỏ giả lập `setTimeout` 700ms khi thanh toán; kết nối trực tiếp `payOrder(id)` chuyển order sang `PAID` và ghế sang `SOLD`.
+      - Xóa bỏ tính toán giá ảo trên client (bỏ cộng phí 2%, bỏ giảm giá 20% tự bịa). `order.totalAmount` từ server là giá trị thanh toán duy nhất.
+      - Tích hợp đồng hồ đếm ngược giữ chỗ thời gian thực dựa trên `order.expiresAt` của máy chủ. Khi hết hạn, tự động làm mới trạng thái đơn hàng và thông báo giải phóng ghế.
+      - Thêm nút **Huỷ đơn hàng** gọi `cancelOrder(id)` cho phép người dùng tự giải phóng ghế khi đơn ở trạng thái `PENDING`.
+      - Xử lý trọn vẹn 3 trạng thái đơn: `PENDING` (chờ thanh toán), `PAID` (vé điện tử + QR code), `CANCELLED` (đơn đã huỷ, ghế đã hoàn trả).
+
+  - **Đồng bộ luồng chọn ghế nguyên tử ([`MatchDetailPage.jsx`](file:///d:/GoalHub/frontend/src/features/matches/MatchDetailPage.jsx)):**
+    - Chuẩn hóa sơ đồ ghế phân loại theo đúng `SeatClass` (`VIP`, `STANDARD`) tương thích với backend.
+    - Loại bỏ chọn số lượng chung chung (`quantity`); người dùng chọn ghế cụ thể trên sơ đồ (`selectedSeatIds`).
+    - Nút **"Tiến hành đặt vé"** gọi trực tiếp `createOrder({ matchId, seatIds })` để kích hoạt cơ chế khóa ghế nguyên tử (Atomic locking / `SELECT ... FOR UPDATE`), sau đó điều hướng ngay sang `/orders/{order.id}` để thanh toán.
+    - Cập nhật [`BookingPage.jsx`](file:///d:/GoalHub/frontend/src/features/booking/BookingPage.jsx) tự động chuyển hướng về `/matches/:id` để chọn ghế trực quan.
+    - [`CartDrawer.jsx`](file:///d:/GoalHub/frontend/src/components/CartDrawer.jsx) kiểm tra bắt buộc phải có ít nhất 1 ghế cụ thể trước khi tạo đơn hàng.
+
+  - **Cập nhật Trang Vé Của Tôi ([`MyOrdersPage.jsx`](file:///d:/GoalHub/frontend/src/features/orders/MyOrdersPage.jsx)):**
+    - Hiển thị badge hạn giữ chỗ `expiresAt` cho đơn `PENDING`.
+    - Thêm nút hành động trực tiếp: **"Thanh toán ngay →"** và **"Huỷ đơn"** cho các đơn `PENDING`.
+    - Hiển thị nút **"Đặt lại trận này"** cho các đơn `CANCELLED`.
+    - Hiển thị nút **"Chi tiết vé"** và **"Xem QR"** cho các đơn `PAID`.
+
+  - **Dọn dẹp code rác & Mock data:**
+    - Xóa bỏ hoàn toàn file mock cũ [`mockData.js`](file:///d:/GoalHub/frontend/src/api/mockData.js).
+
+  - **Kết quả kiểm thử:**
+    - Backend: `mvn test` → `Tests run: 110, Failures: 0, Errors: 0, Skipped: 11` (`BUILD SUCCESS`, 15.28s).
+    - Frontend: `npm run build` thành công (1.15s), `npm run lint` đạt `0 errors` (18 warnings).
+
