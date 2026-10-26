@@ -156,4 +156,27 @@ Optimistic Locking vẫn được giữ lại sau cờ cấu hình `app.concurre
 
 ---
 
-*Benchmark chạy bởi `SeatContentionBenchmarkTest.java` — ngày 2026-10-18. Cấu hình: HikariCP `maximumPoolSize=50`, MySQL 9.3.0, i7-10850H 6C/12T, RAM 32 GB.*
+## Cấu hình Connection Pool: Test vs Application
+
+| Thông số | Benchmark Test (`MySQLContainerBase`) | Application Default (`application.yml`) |
+|---|---|---|
+| `maximum-pool-size` | **50** (hardcoded, tối đa hoá áp lực đồng thời) | **10** (default; override qua `HIKARI_MAX_POOL_SIZE`) |
+| `minimum-idle` | 10 | 5 |
+| `connection-timeout` | 30 000 ms | 30 000 ms |
+| `idle-timeout` | — (dùng default Hikari) | 600 000 ms |
+| `max-lifetime` | — (dùng default Hikari) | 1 800 000 ms |
+
+### Tại sao pool test = 50 nhưng production default = 10?
+
+- **Test (pool=50):** Mục tiêu là tối đa hoá số lượng request tranh chấp cùng lúc để đo overhead thật của DB. Pool nhỏ hơn sẽ làm giảm áp lực đồng thời, benchmark không còn đại diện.
+- **Production (pool=10):** HikariCP khuyến nghị `pool size ≈ cpu_cores × 2 + effective_disk_spindles`. Với i7-10850H 6C/12T, giá trị 10-12 là hợp lý. Pool quá lớn lãng phí memory và tạo áp lực lên MySQL `max_connections`.
+- **Lưu ý:** Với `max_connections = 151` trên MySQL, chỉ tối đa `(151 - reserved_connections) / số_instance` pool size có thể dùng đồng thời an toàn.
+
+### N=5000 — Tại sao không đo?
+
+Với pool=50 (thread pool tối đa 50), N=5000 chỉ đo throughput của funnel 50-thread, không phải tranh chấp DB thật. Xem giải thích đầy đủ trong phần ["Tại sao N=5000 không có trong báo cáo?"](#tại-sao-n5000-không-có-trong-báo-cáo).
+
+---
+
+*Benchmark chạy bởi `SeatContentionBenchmarkTest.java`. Cấu hình: HikariCP `maximumPoolSize=50` (test), application default `maximumPoolSize=10`, MySQL 9.3.0 InnoDB, i7-10850H 6C/12T, RAM 32 GB.*
+*Testcontainers migration: 2026-10-26 — các test chạy trên MySQL 8.0 container tự động, không cần localhost MySQL.*

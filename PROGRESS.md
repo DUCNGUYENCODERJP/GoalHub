@@ -76,3 +76,35 @@ Tài liệu theo dõi tiến độ từng bước theo định hướng chống 
     - **Test 2 — Nhiều ghế chồng lấn:** 50 người tranh 3 ghế, mỗi đơn chọn 2 trong 3 ghế (3 combo [A,B], [B,C], [A,C]). Kết quả: **PASS**. Đúng 1 đơn, 2 ghế RESERVED, `availableSeats` giảm đúng 2.
     - **Test 3 — Chồng lấn chéo với thứ tự ngẫu nhiên (20 lượt):** 20 lượt × 30 người × 3 ghế, mỗi đơn 2 ghế chéo (`{1,2}`, `{2,3}`, `{3,1}`), truyền seatIds **thứ tự ngẫu nhiên** (giả lập client). Kết quả: **20/20 PASS, 0 deadlock**, mỗi ghế thuộc tối đa 1 đơn. Xác nhận seatIds được sort cố định trước UPDATE.
     - **Kết quả kiểm thử:** Tests run: 3, Failures: 0, Errors: 0 (`BUILD SUCCESS`, 6:21 min).
+
+- [x] **BƯỚC 6 — Bảo mật credential, Testcontainers, sửa unit test, pool config**
+
+  - **Xóa password hardcode:**
+    - Đã xác minh: `25112006` đã có trong git history tại commit `6794c78` (initial commit, trên `origin/main`). Cần **rotate DB password thật** vì history public.
+    - Xóa khỏi `docker-compose.yml` (fail-fast `${DB_PASSWORD:?}`), `application-mysql-test.yml` (không còn fallback).
+    - File `.env` giữ nguyên (đã có trong `.gitignore`, không bị track).
+    - 3 file test Java: xóa hoàn toàn khi migrate sang Testcontainers.
+
+  - **Migrate 3 test concurrency sang Testcontainers:**
+    - Tạo [`MySQLContainerBase.java`](file:///d:/GoalHub/src/test/java/com/goalhub/order/MySQLContainerBase.java): base class `@Testcontainers(disabledWithoutDocker=true)` với `@Container static MySQLContainer` dùng chung. `@DynamicPropertySource` inject URL/credentials + pool=50 vào tất cả subclass.
+    - `SeatContentionTest`, `SeatContentionBenchmarkTest`, `SeatContentionStressTest` đều kế thừa `MySQLContainerBase`. Không còn hardcode credentials hay localhost.
+    - `MySQLDatabaseSmokeTest` đã dùng Testcontainers từ trước — không đổi.
+    - Tests tự động skip khi Docker daemon không chạy.
+
+  - **Sửa 4 unit test `OrderServiceTest` (lỗi thời sau refactor Atomic SQL):**
+    - `createsOrderSuccessfully`: mock `updateStatusIfStatusIs` + `decrementAvailableSeats`, verify atomic calls thay vì assert in-memory object.
+    - `cancelOrder_success`, `cancelOrder_adminCanCancel`, `releaseExpiredOrders_success`: `verify incrementAvailableSeats(id, N)` + `verify never().save(match)` thay vì `assertThat(match.getAvailableSeats())`.
+
+  - **Thêm 4 integration test MySQL thật ([`OrderLifecycleIntegrationTest.java`](file:///d:/GoalHub/src/test/java/com/goalhub/order/OrderLifecycleIntegrationTest.java)):**
+    - `cancelOrder_verifyDbState`: seat=AVAILABLE + availableSeats restored trong DB sau cancel.
+    - `cancelOrder_seatsBecomBookableAgain`: ghế đã cancel được đặt lại bởi người khác.
+    - `releaseExpiredOrders_verifyDbState`: force expire, verify DB state sau job chạy.
+    - `releaseExpiredOrders_idempotent`: chạy job 2 lần không double-restore.
+
+  - **Pool config rõ ràng:** Thêm `hikari.maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:10}` vào `application.yml`. Ghi rõ trong [`docs/concurrency-benchmark.md`](file:///d:/GoalHub/docs/concurrency-benchmark.md): test dùng pool=50 (benchmark), application default pool=10.
+
+  - **Sửa comment lỗi thời:** `Seat.java` — cập nhật comment `@Version` cho đúng với code thực tế.
+
+  - **Kết quả kiểm thử:** `Tests run: 105, Failures: 0, Errors: 0, Skipped: 11` (`BUILD SUCCESS`, ~24s).
+    - 11 skipped = tất cả Testcontainers test (Docker không chạy lúc test): `MySQLDatabaseSmokeTest`(1), `SeatContentionTest`(2), `SeatContentionBenchmarkTest`(1), `SeatContentionStressTest`(3), `OrderLifecycleIntegrationTest`(4).
+    - Khi Docker chạy: tất cả 11 test này thực thi trên MySQL 8.0 container thật.

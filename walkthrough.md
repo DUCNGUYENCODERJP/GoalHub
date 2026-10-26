@@ -8,17 +8,22 @@
 ## 1. Trạng Thái Build & Kiểm Thử Hiện Tại
 
 ### 1.1. Backend (Spring Boot 3.3.4 + Java 17)
-- **Maven Test Result**: `BUILD SUCCESS` (Tổng thời gian: ~23s)
-- **Test Coverage**: **94/94** tests đạt 100%, 0 failures, 0 errors.
+- **Maven Test Result**: `BUILD SUCCESS` (Tổng thời gian: ~24s)
+- **Test Coverage**: **105 tests** (0 failures, 0 errors, **11 skipped** khi Docker daemon không chạy)
 
-| Module | Unit Tests (Service / Logic) | Integration Tests (Controller / MockMvc) | Tổng số Test | Trạng Thái |
+| Module | Tests (passed) | Tests (skipped, cần Docker) | Tổng | Trạng Thái |
 |---|---|---|---|---|
-| **Auth** | - | 4 | 4 | ✅ Passed |
-| **Config (Seeder)** | 1 | - | 1 | ✅ Passed |
-| **Match** | 10 | 13 | 23 | ✅ Passed |
-| **Seat** | 8 | 11 | 19 | ✅ Passed |
-| **Order** | 23 | 24 | 47 | ✅ Passed |
-| **Tổng cộng** | **42** | **52** | **94** | ✅ **BUILD SUCCESS** |
+| **Auth** | 4 | 0 | 4 | ✅ Passed |
+| **Config (Seeder)** | 1 | 0 | 1 | ✅ Passed |
+| **Match** | 23 | 0 | 23 | ✅ Passed |
+| **Seat** | 19 | 0 | 19 | ✅ Passed |
+| **Order (unit + controller)** | 47 | 0 | 47 | ✅ Passed |
+| **Order (concurrency, lifecycle)** | 0 | 10 | 10 | ⏭ Skipped (Testcontainers) |
+| **Infra (MySQL smoke)** | 1 | 1 | 2 | ✅/⏭ |
+| **Tổng cộng** | **95** | **11** | **106*** | ✅ **BUILD SUCCESS** |
+
+> *Maven aggregate: 105 (surefire đếm một số nested class một lần). 0 failures, 0 errors.
+> Chạy `docker start goalhub-mysql` trước `mvn test` để chạy thêm 11 Testcontainers test.
 
 ### 1.2. Frontend (React 19 + Vite 8.3 + TailwindCSS v4)
 - **Vite Build**: `npm run build` hoàn thành thành công trong **1.13s** (`dist/` sẵn sàng production).
@@ -29,7 +34,9 @@
 
 ## 2. Kiến Trúc Cơ Sở Dữ Liệu & Entity Relationship (ERD)
 
-GoalHub sử dụng **MySQL** cho môi trường chạy ứng dụng (`goalhub` DB) và **H2** (`MODE=MySQL`) cho môi trường Unit / Integration Test.
+GoalHub sử dụng **MySQL** cho môi trường chạy ứng dụng (`goalhub` DB).
+- **Unit test** (non-concurrency): **H2** in-memory (`MODE=MySQL`) — nhanh, không cần Docker.
+- **Integration test concurrency** (`SeatContentionTest`, `SeatContentionBenchmarkTest`, `SeatContentionStressTest`, `OrderLifecycleIntegrationTest`): **MySQL 8.0 thật** qua **Testcontainers** — tự động skip khi Docker không chạy.
 
 ```
 users
